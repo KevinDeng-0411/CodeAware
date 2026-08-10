@@ -19,6 +19,15 @@ import {
   type ChatTurn,
 } from "./chatTurnController";
 
+// ADR-0016: Agent 模式工具调用过程（tool.call -> tool.result 配对）
+interface ToolActivity {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+  status: "ok" | "error" | "running";
+  result?: string;
+}
+
 const CANCELLED_STATUS = "生成已取消";
 const INTERRUPTED_STATUS = "生成中断，已从服务器恢复消息";
 const PROTOCOL_ERROR_STATUS = "聊天流协议错误，已从服务器恢复消息";
@@ -37,7 +46,8 @@ export default function ChatPage() {
   const [turnMeta, setTurnMeta] = useState<{
     refs: ContextReferences | null;
     reasoning: string;
-  }>({ refs: null, reasoning: "" });
+    tools: ToolActivity[];
+  }>({ refs: null, reasoning: "", tools: [] });
   const [turnController] = useState(() => new ChatTurnController());
   const scrollRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
@@ -75,14 +85,14 @@ export default function ChatPage() {
     setStreaming(false);
     setTurnStatus(null);
     setWarnings([]);
-    setTurnMeta({ refs: null, reasoning: "" });
+    setTurnMeta({ refs: null, reasoning: "", tools: [] });
   };
 
   const selectConv = async (cid: string) => {
     if (streaming) return;
     setActiveCid(cid);
     setTurnStatus(null);
-    setTurnMeta({ refs: null, reasoning: "" });
+    setTurnMeta({ refs: null, reasoning: "", tools: [] });
     setLoadingConv(true);
     try {
       setMessages(await chat.messages(cid));
@@ -157,7 +167,7 @@ export default function ChatPage() {
     setStreaming(true);
     setWarnings([]);
     setTurnStatus(null);
-    setTurnMeta({ refs: null, reasoning: "" });
+    setTurnMeta({ refs: null, reasoning: "", tools: [] });
     setMessages(optimisticTurnMessages(turn.baseMessages, text));
 
     try {
@@ -188,6 +198,32 @@ export default function ChatPage() {
               };
               return next;
             });
+          },
+          onToolCall: (e) => {
+            if (turnController.acceptsEvents(turn))
+              setTurnMeta((prev) => ({
+                ...prev,
+                tools: [
+                  ...prev.tools,
+                  {
+                    callId: e.tool_call_id,
+                    name: e.tool_name,
+                    args: e.tool_args,
+                    status: "running",
+                  },
+                ],
+              }));
+          },
+          onToolResult: (e) => {
+            if (turnController.acceptsEvents(turn))
+              setTurnMeta((prev) => ({
+                ...prev,
+                tools: prev.tools.map((t) =>
+                  t.callId === e.tool_call_id
+                    ? { ...t, status: e.status, result: e.result }
+                    : t,
+                ),
+              }));
           },
           onContextWarning: (e) =>
             setWarnings((w) =>
@@ -314,6 +350,7 @@ export default function ChatPage() {
                     streaming={streaming && last}
                     refs={last ? turnMeta.refs : undefined}
                     reasoning={last ? turnMeta.reasoning : undefined}
+                    tools={last ? turnMeta.tools : undefined}
                   />
                 );
               })}
@@ -383,11 +420,13 @@ function MessageBubble({
   streaming,
   refs,
   reasoning,
+  tools,
 }: {
   msg: ChatMessage;
   streaming: boolean;
   refs?: ContextReferences | null;
   reasoning?: string;
+  tools?: ToolActivity[];
 }) {
   const isUser = msg.role === "USER";
   const showThinking = !isUser && !!reasoning;
@@ -395,6 +434,7 @@ function MessageBubble({
     !isUser &&
     !!refs &&
     (refs.knowledge_refs.length > 0 || refs.memory_refs.length > 0);
+  const showTools = !isUser && !!tools && tools.length > 0;
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       <div
@@ -430,7 +470,47 @@ function MessageBubble({
           {streaming && msg.content && <SignalTrace label="STREAMING" />}
         </div>
         {showRefs && <SourceCards refs={refs!} />}
+        {showTools && <ToolTrace tools={tools!} />}
       </div>
+    </div>
+  );
+}
+
+// ADR-0016: 工具调用过程折叠面板（Agent 模式 tool.call/tool.result 轨迹）
+function ToolTrace({ tools }: { tools: ToolActivity[] }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-2 rounded border border-line bg-graph/40">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-1.5 font-mono text-2xs uppercase tracking-techy text-mute"
+      >
+        <span>工具调用 · {tools.length} 次{!expanded ? " · 已折叠" : ""}</span>
+        <span>{expanded ? "▾ 收起" : "▸ 展开"}</span>
+      </button>
+      {expanded && (
+        <div className="px-3 py-2 space-y-2 border-t border-line/60">
+          {tools.map((t) => (
+            <div key={t.callId} className="font-mono text-2xs">
+              <div className="flex items-center gap-2 text-mute">
+                <span className={t.status === "running" ? "text-amber" : t.status === "ok" ? "text-graph" : "text-oxblood"}>
+                  {t.status === "running" ? "⟳" : t.status === "ok" ? "✓" : "✗"}
+                </span>
+                <span className="text-ink">{t.name}</span>
+                {t.args && Object.keys(t.args).length > 0 && (
+                  <span className="text-mute/70">{JSON.stringify(t.args)}</span>
+                )}
+              </div>
+              {t.result && (
+                <pre className="mt-1 whitespace-pre-wrap text-mute/70 max-h-24 overflow-y-auto bg-panel/60 rounded px-2 py-1">
+                  {t.result}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -51,6 +51,17 @@ export interface ContextReferences extends ChatEventBase {
   knowledge_refs: KnowledgeRef[];
   memory_refs: MemoryRef[];
 }
+export interface ToolCall extends ChatEventBase {
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+  tool_call_id: string;
+}
+export interface ToolResult extends ChatEventBase {
+  tool_call_id: string;
+  tool_name: string;
+  status: "ok" | "error";
+  result: string;
+}
 export interface PostTurnWarning extends ChatEventBase {
   component: WarningComponent;
   code: string;
@@ -89,6 +100,8 @@ export type ChatEvent =
   | ContextReferences
   | ReasoningDelta
   | TokenDelta
+  | ToolCall
+  | ToolResult
   | PostTurnWarning
   | ChatCompleted
   | ChatFailed;
@@ -99,6 +112,8 @@ export const EVENT_NAMES = [
   "context.references",
   "reasoning.delta",
   "token.delta",
+  "tool.call",
+  "tool.result",
   "post_turn.warning",
   "chat.completed",
   "chat.failed",

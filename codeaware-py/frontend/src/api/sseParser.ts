@@ -11,6 +11,8 @@ import type {
   FailurePhase,
   PostTurnWarning,
   ReasoningDelta,
+  ToolCall,
+  ToolResult,
   TokenDelta,
   WarningComponent,
 } from "./chatEvents";
@@ -97,6 +99,8 @@ export interface ChatStreamHandlers {
   onReferences?: (event: ContextReferences) => void;
   onReasoning?: (event: ReasoningDelta) => void;
   onDelta?: (event: TokenDelta) => void;
+  onToolCall?: (event: ToolCall) => void;
+  onToolResult?: (event: ToolResult) => void;
   onContextWarning?: (event: ContextWarning) => void;
   onPostWarning?: (event: PostTurnWarning) => void;
   onCompleted?: (event: ChatCompleted) => void;
@@ -196,6 +200,29 @@ function validateEventShape(eventName: EventName, payload: JsonRecord): void {
       if (badKref || badMref) invalidEvent(eventName, "references 字段不完整");
       return;
     }
+    case "tool.call":
+      if (
+        typeof payload.tool_name !== "string" ||
+        !payload.tool_name ||
+        !isRecord(payload.tool_args) ||
+        typeof payload.tool_call_id !== "string" ||
+        !payload.tool_call_id
+      ) {
+        invalidEvent(eventName, "tool.call 字段不完整");
+      }
+      return;
+    case "tool.result":
+      if (
+        typeof payload.tool_call_id !== "string" ||
+        !payload.tool_call_id ||
+        typeof payload.tool_name !== "string" ||
+        !payload.tool_name ||
+        (payload.status !== "ok" && payload.status !== "error") ||
+        typeof payload.result !== "string"
+      ) {
+        invalidEvent(eventName, "tool.result 字段不完整");
+      }
+      return;
     case "context.warning":
     case "post_turn.warning":
       if (
@@ -318,6 +345,12 @@ class ChatStreamState {
         return;
       case "token.delta":
         handlers.onDelta?.(parsed as unknown as TokenDelta);
+        return;
+      case "tool.call":
+        handlers.onToolCall?.(parsed as unknown as ToolCall);
+        return;
+      case "tool.result":
+        handlers.onToolResult?.(parsed as unknown as ToolResult);
         return;
       case "context.warning":
         handlers.onContextWarning?.(parsed as unknown as ContextWarning);
