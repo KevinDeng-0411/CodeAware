@@ -1,16 +1,17 @@
 # Agent 模式评估：工具决策 + ReAct 闭环（ADR-0016）
 
-> 结论：**门禁全过**——工具 recall 1.0、闭环率 1.0、direct 不误调工具 1.0。
-> eval 驱动一轮 prompt/防打转迭代：首轮暴露"过度工具调用"，修复后闭环率 0.833→1.0。
+> 结论：**门禁全过**——工具 recall 1.0、闭环率 1.0、direct 不误调工具 1.0（18 case）。
+> eval 驱动多轮迭代：首轮暴露"过度工具调用"→ per-tool 上限 → 模型自评 + 检索收敛检测。
 
 ## 1. 评估目标与方法
 
 衡量 Agent 模式（ReAct 工具循环）的**模型决策质量**，非检索质量（检索由 60 条 golden 另评）。
 
-- **case 集**（6 类各 1 核心）：need_search / need_doc / need_calc / need_time / multi_step / direct，每 case 标注期望工具序列
+- **case 集**（6 类 × 3 个 = 18，稳定统计）：need_search / need_doc / need_calc / need_time / multi_step / direct，每 case 标注期望工具序列
+  - expected 标注反映**真实工具需求**（非最简）：need_doc/multi_step 的"完整内容/对比"类含 `get_document`（看详情）
 - **指标**：
   - `recall`：期望工具 ⊆ 实际调用（该调的都调了）——主指标
-  - `exact`：实际调用集 == 期望集（不多调）
+  - `exact`：实际调用集 == 期望集（参考；多工具场景允许合理偏差）
   - `closure`：步数上限内收敛到终答（非死循环/达上限无答案）
   - `direct no_tool`：常识问题不调工具
 - **运行**：真实 DeepSeek v4-flash + Ollama bge-m3 + BM25，复用生产代码（AgentToolkit/react_loop/_build_agent_system_prompt），live_eval
@@ -104,21 +105,21 @@ per-tool 上限是**死限制**（数次数不看进展），只拦"第 N 次"�
 
 ## 4. 门禁判定
 
-| 门禁 | 要求 | 实际 | 判定 |
+| 门禁 | 要求 | 实际（18 case） | 判定 |
 |---|---|---|---|
-| 工具 recall | ≥ 0.70 | **1.0** | ✅ |
-| 闭环率 | ≥ 0.90 | **1.0** | ✅ |
-| direct 不误调工具 | = 100% | **1.0** | ✅ |
+| 工具 recall | ≥ 0.70 | **1.0** (18/18) | ✅ |
+| 闭环率 | ≥ 0.90 | **1.0** (18/18) | ✅ |
+| direct 不误调工具 | = 100% | **1.0** (3/3) | ✅ |
 
 ## 5. 已知边界（后续可改进）
 
-- **exact 0.667 仍偏低**：need_search 仍多调 list_documents（模型想枚举文档）。per-tool 上限拦住最严重的（get_document 反复），但"多余辅助工具"（list_documents）仍有。
-- **average steps 2.67**：need_search/doc 仍 4 步（多轮）。进一步收紧需 prompt 更明确"检索一次即答"，或调低 search 上限。
-- 6 case 样本小：稳定统计需扩充 case 集（每类 3-5 个）。
+- **exact 0.5 偏低（参考指标）**：need_search 仍多调 list_documents（模型想枚举文档）。expected 标注已细化（多工具场景含 get_document），exact 反映"模型自主决策 vs 标注期望"偏差，多工具场景允许合理偏差；recall 1.0 证明"该调的都调"达标。
+- **avg_steps 2.28**：多工具 case（multi_step 需 search+get_document）平均 3-4 步。进一步收紧需 prompt 更明确"检索一次即答"。
+- exact 是多工具场景的**严格匹配**，可考虑改为"多余工具是否带来信息增量"判定（当前保留参考口径）。
 
 ## 6. 复现
 
 ```bash
 cd codeaware-py && uv run python scripts/run_tests_safe.py tests/eval/test_agent_eval.py -m live_eval -q
 ```
-（需真实 DeepSeek + Ollama + PG/Redis，约 3 分钟）
+（需真实 DeepSeek + Ollama + PG/Redis，约 3-5 分钟）

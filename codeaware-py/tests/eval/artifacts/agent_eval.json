@@ -1,18 +1,18 @@
 {
-  "n": 6,
+  "n": 18,
   "tool_selection": {
     "recall_mean": 1.0,
     "exact_mean": 0.5,
-    "recall_ok": 6
+    "recall_ok": 18
   },
   "closure": {
     "closed_mean": 1.0,
-    "closed_ok": 6,
-    "avg_steps": 2.17
+    "closed_ok": 18,
+    "avg_steps": 2.28
   },
   "direct": {
-    "n": 1,
-    "no_tool": 1,
+    "n": 3,
+    "no_tool": 3,
     "no_tool_rate": 1.0
   },
   "rows": [
@@ -33,7 +33,45 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库文档《缓存击穿方案》（id=2）的内容回答：\n\n## 缓存击穿\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB）。\n\n**解决方案**（两种）：\n\n### 1. 互斥锁\n- 使用 `redis_setnx`"
+      "answer_preview": "根据团队知识库文档（《缓存击穿方案》），回答如下：\n\n## 缓存击穿\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB），导致数据库过载。\n\n## 解决方案\n\n知识库给出的方案有两种：\n\n### 1. 互斥锁（Mute"
+    },
+    {
+      "query": "RAG 混合检索是怎么融合的？",
+      "category": "need_search",
+      "expected": [
+        "search_knowledge"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库文档（`RAG 混合检索`，id=5），RAG 混合检索的融合流程如下：\n\n## 融合流程\n\n**查询重写 → 双路检索 → RRF 融合**\n\n### 1. 查询重写\n对用户的原始查询先进行重写，得到更利于检索的查询形式。\n\n#"
+    },
+    {
+      "query": "DeepSeek thinking 模式怎么用？",
+      "category": "need_search",
+      "expected": [
+        "search_knowledge"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库中《DeepSeek 集成》文档的内容，DeepSeek thinking 模式的使用要点如下：\n\n## DeepSeek thinking 模式使用要点\n\n**thinking 模式（开启思考）**\n- 使用 `json_mod"
     },
     {
       "query": "缓存击穿方案的完整内容是什么？",
@@ -52,7 +90,47 @@
       "exact": false,
       "closed": true,
       "steps": 2,
-      "answer_preview": "# 缓存击穿方案（知识库文档 id=2）\n\n**文档状态**：ACTIVE（来源：MANUAL）\n\n## 完整内容\n\n**缓存击穿**：热点 Key 失效瞬间大量请求打 DB。\n\n**方案**：互斥锁、逻辑过期。\n\n使用 `redis_se"
+      "answer_preview": "知识库中「缓存击穿方案」文档（id=2，状态 ACTIVE）的完整内容如下：\n\n---\n\n## 缓存击穿\n\n**问题场景**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB）。\n\n**解决方案**：互斥锁（Mutex Lock）、逻"
+    },
+    {
+      "query": "RAG 混合检索的完整实现是什么？",
+      "category": "need_doc",
+      "expected": [
+        "search_knowledge",
+        "get_document"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库文档 **id=5「RAG 混合检索」**（状态: ACTIVE，来源: MANUAL），完整的实现链路如下：\n\n## RAG 混合检索实现\n\n**核心流程（三段式管线）：**\n\n```\n查询重写 → BM25 关键词检索 + p"
+    },
+    {
+      "query": "FastAPI 异步架构是怎么设计的？",
+      "category": "need_doc",
+      "expected": [
+        "search_knowledge",
+        "get_document"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库中的专门文档（《FastAPI 异步架构》，id=7），结合相关文档片段，我整理如下：\n\n## FastAPI 异步架构设计要点\n\n**核心原则：全异步（Full Async）**，即从入口到数据访问的整条链路都使用异步实现，避免"
     },
     {
       "query": "帮我计算 123 乘以 456",
@@ -68,7 +146,39 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "123 × 456 = **56088**。"
+      "answer_preview": "123 乘以 456 的结果是 **56088**。"
+    },
+    {
+      "query": "2024 除以 4 的余数是多少？",
+      "category": "need_calc",
+      "expected": [
+        "calculate"
+      ],
+      "predicted": [
+        "calculate"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "2024 除以 4 的余数是 **0**（2024 能被 4 整除，所以是闰年）。"
+    },
+    {
+      "query": "计算 3.14 乘以 2 的平方",
+      "category": "need_calc",
+      "expected": [
+        "calculate"
+      ],
+      "predicted": [
+        "calculate"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "计算结果：**3.14 × 2² = 12.56**\n\n计算过程：2 的平方是 4，3.14 × 4 = 12.56。"
     },
     {
       "query": "现在几点？",
@@ -84,14 +194,47 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "现在是 **2026年8月10日 星期一，下午 3:08（15:08）**。"
+      "answer_preview": "现在是 **2026年8月10日（星期一）15:18:35**。"
+    },
+    {
+      "query": "今天星期几？",
+      "category": "need_time",
+      "expected": [
+        "get_current_time"
+      ],
+      "predicted": [
+        "get_current_time"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "今天是**星期一**（2026年8月10日）。"
+    },
+    {
+      "query": "现在是什么日期？",
+      "category": "need_time",
+      "expected": [
+        "get_current_time"
+      ],
+      "predicted": [
+        "get_current_time"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "今天是 **2026年8月10日，星期一**，当前时间为下午 3 点 18 分。"
     },
     {
       "query": "对比缓存击穿和缓存穿透的解决方案",
       "category": "multi_step",
       "expected": [
         "search_knowledge",
-        "search_knowledge"
+        "search_knowledge",
+        "get_document"
       ],
       "predicted": [
         "search_knowledge",
@@ -105,7 +248,51 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "基于知识库文档（`缓存击穿方案` id=2、`缓存穿透方案` id=3），对比如下：\n\n## 对比：缓存击穿 vs 缓存穿透\n\n| 维度 | 缓存击穿 | 缓存穿透 |\n|---|---|---|\n| **本质** | **热点 Key 失"
+      "answer_preview": "根据知识库中的文档（《缓存击穿方案》和《缓存穿透方案》），两者对比如下：\n\n## 缓存击穿 vs 缓存穿透\n\n### 缓存击穿\n- **定义**：热点 Key 失效的瞬间，大量请求同时打到数据库\n- **触发场景**：某个**热点数据**的"
+    },
+    {
+      "query": "短期记忆和长期记忆有什么区别？",
+      "category": "multi_step",
+      "expected": [
+        "search_knowledge",
+        "search_knowledge",
+        "get_document"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库中的技术文档，系统中\"短期记忆\"和\"长期记忆\"的实现区别如下：\n\n## 短期记忆（ShortTermMemoryManager）\n- **存储方式**：PG messages 表为真相源 + Redis 滑窗缓存，缓存 miss "
+    },
+    {
+      "query": "缓存击穿和缓存雪崩的应对策略有什么不同？",
+      "category": "multi_step",
+      "expected": [
+        "search_knowledge",
+        "search_knowledge",
+        "get_document"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库中的文档，我来对比缓存击穿和缓存雪崩的应对策略。\n\n## 核心区别\n\n| 维度 | 缓存击穿 | 缓存雪崩 |\n|------|----------|----------|\n| **问题本质** | **单个热点 Key** 失效"
     },
     {
       "query": "你好",
@@ -117,7 +304,31 @@
       "exact": true,
       "closed": true,
       "steps": 1,
-      "answer_preview": "你好！我是 CodeAware Agent，很高兴为你服务。😊\n\n我可以帮你：\n- 📚 **检索知识库**：查找技术文档、规范、设计文档、团队约定等\n- 📄 **查看文档详情**：获取知识库中文档的完整内容\n- 🔢 **精确计算**：处理数"
+      "answer_preview": "你好！我是 CodeAware Agent，可以帮你：\n\n- 📚 **检索知识库**：查询团队的技术文档、规范、设计文档、操作手册等\n- 🔢 **精确计算**：处理数学表达式运算\n- 🕐 **查询时间**：获取当前日期和时间\n\n有什么我可以"
+    },
+    {
+      "query": "你是谁？",
+      "category": "direct",
+      "expected": [],
+      "predicted": [],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 1,
+      "answer_preview": "我是 CodeAware Agent，一个能自主调用工具来回答问题的智能助手。我的知识库包含团队的技术文档，回答问题时我会优先检索知识库，确保答案有据可依。\n\n我具备以下能力：\n- **检索知识库**：查找规范、设计文档、团队约定、代码说明"
+    },
+    {
+      "query": "谢谢你的帮助",
+      "category": "direct",
+      "expected": [],
+      "predicted": [],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 1,
+      "answer_preview": "不客气！😊 很高兴能帮到你。\n\n如果之后有任何问题——无论是技术规范、知识库文档检索，还是需要计算或查询时间——随时都可以来问我。祝你工作顺利！"
     }
   ]
 }

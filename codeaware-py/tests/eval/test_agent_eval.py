@@ -29,14 +29,36 @@ MAX_STEPS = 4
 
 # 期望工具序列判据：模型自主决策，允许一定灵活性，用"该调的都调了（recall）"为主指标，
 # 精确匹配为参考。direct（常识）要求不调任何工具（precision=1）。
+# 期望工具序列判据（v2 细化，反映真实工具需求而非最简）：
+# - need_search：片段检索即可答
+# - need_doc：问"完整内容/实现"，需要看全文 → search + get_document
+# - multi_step：对比/多主题，需多次检索 + 看详情 → search×N + get_document
+# 每类 3 个（稳定统计），共 18 个。recall 为主门禁，exact 为参考（多工具场景允许偏差）。
 AGENT_CASES = [
-    # (query, expected_tools, category) — 每类 1 个核心 case（控制 live eval 耗时）
+    # ---- need_search：片段检索即可答 ----
     ("缓存击穿怎么解决？", ["search_knowledge"], "need_search"),
+    ("RAG 混合检索是怎么融合的？", ["search_knowledge"], "need_search"),
+    ("DeepSeek thinking 模式怎么用？", ["search_knowledge"], "need_search"),
+    # ---- need_doc：问完整内容/实现，需看全文 ----
     ("缓存击穿方案的完整内容是什么？", ["search_knowledge", "get_document"], "need_doc"),
+    ("RAG 混合检索的完整实现是什么？", ["search_knowledge", "get_document"], "need_doc"),
+    ("FastAPI 异步架构是怎么设计的？", ["search_knowledge", "get_document"], "need_doc"),
+    # ---- need_calc：精确算术 ----
     ("帮我计算 123 乘以 456", ["calculate"], "need_calc"),
+    ("2024 除以 4 的余数是多少？", ["calculate"], "need_calc"),
+    ("计算 3.14 乘以 2 的平方", ["calculate"], "need_calc"),
+    # ---- need_time：当前时间/日期 ----
     ("现在几点？", ["get_current_time"], "need_time"),
-    ("对比缓存击穿和缓存穿透的解决方案", ["search_knowledge", "search_knowledge"], "multi_step"),
+    ("今天星期几？", ["get_current_time"], "need_time"),
+    ("现在是什么日期？", ["get_current_time"], "need_time"),
+    # ---- multi_step：对比/多主题，需多次检索 + 看详情 ----
+    ("对比缓存击穿和缓存穿透的解决方案", ["search_knowledge", "search_knowledge", "get_document"], "multi_step"),
+    ("短期记忆和长期记忆有什么区别？", ["search_knowledge", "search_knowledge", "get_document"], "multi_step"),
+    ("缓存击穿和缓存雪崩的应对策略有什么不同？", ["search_knowledge", "search_knowledge", "get_document"], "multi_step"),
+    # ---- direct：常识问题，不应调工具 ----
     ("你好", [], "direct"),
+    ("你是谁？", [], "direct"),
+    ("谢谢你的帮助", [], "direct"),
 ]
 
 
