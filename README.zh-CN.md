@@ -236,7 +236,7 @@ flowchart TD
     D -->|否| E[终答<br/>基于工具观察结果]
     D -->|是| F[执行工具<br/>search_knowledge / get_document<br/>list_documents / calculate / 时间]
     F --> G[回注 ToolMessage<br/>携带 reasoning_content]
-    G --> H{信息足够?<br/>检索收敛(无新文档)<br/>或 达步数上限}
+    G --> H{信息足够?<br/>检索收敛<br/>或 达步数上限}
     H -->|否| C
     H -->|是| E
     E --> I[持久化 ASSISTANT<br/>Transaction B]

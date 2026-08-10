@@ -236,7 +236,7 @@ flowchart TD
     D -->|no| E[Final answer<br/>based on tool observations]
     D -->|yes| F[Execute tool<br/>search_knowledge / get_document<br/>list_documents / calculate / time]
     F --> G[Append ToolMessage<br/>carry reasoning_content]
-    G --> H{信息足够?<br/>检索收敛(无新文档)<br/>或 达步数上限}
+    G --> H{Info sufficient?<br/>retrieval converged<br/>or max steps}
     H -->|no| C
     H -->|yes| E
     E --> I[Persist ASSISTANT<br/>Transaction B]
