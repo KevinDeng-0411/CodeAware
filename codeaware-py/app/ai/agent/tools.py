@@ -3,7 +3,8 @@
 设计原则：
 - 工具不重复 ADR-0015 已做的检索决策，只暴露能力。
 - 模型负责决策（何时查/查够没），工具负责专长（查得准/算得对）。
-- 工具返回**格式化字符串**（observation 给模型看），非结构化对象。
+- 工具返回 `ToolObservation`（display 给模型看 + doc_ids 签名供 react_loop 收敛检测）；
+  计算/时间等无文档工具返回 str（react_loop 兜底）。
 - DB 工具内部自管短 session（AsyncSessionLocal），不跨模型调用持有事务（ADR-0003）。
 
 工具集（与用户确定）：
@@ -18,6 +19,7 @@
 
 import ast
 import operator as _op
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from langchain_core.tools import tool
@@ -25,6 +27,19 @@ from sqlalchemy import func, select
 
 from app.db.session import AsyncSessionLocal
 from app.models import Document, KnowledgeChunk
+
+
+@dataclass
+class ToolObservation:
+    """工具返回值：展示文本（给模型）+ 文档 id 签名（供 react_loop 收敛检测）。
+
+    doc_ids 空集合表示该结果不含知识库文档信息（如计算/时间，或检索无结果）。
+    react_loop 用 doc_ids 判断"本轮是否带来新文档"，无新文档且检索工具被调用
+    → 判定检索已收敛，强制进入终答（ADR-0016 停止判断优化）。
+    """
+
+    display: str
+    doc_ids: frozenset[int] = field(default_factory=frozenset)
 
 # observation 最大字符数：工具返回过长会撑爆上下文（LLM context 有限）
 MAX_OBSERVATION_CHARS = 4000
@@ -80,7 +95,7 @@ class AgentToolkit:
         reranker = self.reranker
 
         @tool
-        async def search_knowledge(query: str, top_k: int = 5) -> str:
+        async def search_knowledge(query: str, top_k: int = 5) -> ToolObservation:
             """在知识库中检索技术文档片段。
 
             当需要查找规范、设计文档、团队约定、代码说明、操作手册等知识时使用。
@@ -96,10 +111,15 @@ class AgentToolkit:
                 rag = RagService(s, chunker, vector_recall, query_rewriter, hybrid, reranker)
                 results = await rag.search(query, top_k=top_k)
                 context = rag.format_context(results)
-            return _truncate(context) if context else "知识库中未检索到相关内容。"
+            if not context:
+                return ToolObservation(display="知识库中未检索到相关内容。")
+            return ToolObservation(
+                display=_truncate(context),
+                doc_ids=frozenset(r.chunk.document_id for r in results),
+            )
 
         @tool
-        async def get_document(document_id: int) -> str:
+        async def get_document(document_id: int) -> ToolObservation:
             """获取指定知识库文档的完整内容。
 
             当 search_knowledge 只返回片段、需要看文档全文或结构时使用。参数为
@@ -109,11 +129,16 @@ class AgentToolkit:
             async with AsyncSessionLocal() as s:
                 doc = await s.get(Document, document_id)
                 if doc is None:
-                    return f"文档 {document_id} 不存在。可用 list_documents 查看文档列表。"
+                    return ToolObservation(
+                        display=f"文档 {document_id} 不存在。可用 list_documents 查看文档列表。"
+                    )
                 body = doc.content or ""
-                return _truncate(
-                    f"标题: {doc.title}\n状态: {doc.status}\n"
-                    f"来源: {doc.source_type}\n\n{body}"
+                return ToolObservation(
+                    display=_truncate(
+                        f"标题: {doc.title}\n状态: {doc.status}\n"
+                        f"来源: {doc.source_type}\n\n{body}"
+                    ),
+                    doc_ids=frozenset({document_id}),
                 )
 
         @tool

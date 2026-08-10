@@ -2,13 +2,13 @@
   "n": 6,
   "tool_selection": {
     "recall_mean": 1.0,
-    "exact_mean": 0.667,
+    "exact_mean": 0.5,
     "recall_ok": 6
   },
   "closure": {
     "closed_mean": 1.0,
     "closed_ok": 6,
-    "avg_steps": 2.67
+    "avg_steps": 2.17
   },
   "direct": {
     "n": 1,
@@ -32,8 +32,8 @@
       "recall": true,
       "exact": false,
       "closed": true,
-      "steps": 4,
-      "answer_preview": "根据知识库文档（《缓存击穿方案》，id=2），缓存击穿及其解决方案如下：\n\n## 缓存击穿问题\n\n**定义**：某个**热点 Key** 在失效的瞬间，大量并发请求同时打到数据库（DB），导致数据库过载。\n\n> 注意与另外两个问题的区别：\n"
+      "steps": 3,
+      "answer_preview": "根据知识库文档《缓存击穿方案》（id=2）的内容回答：\n\n## 缓存击穿\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB）。\n\n**解决方案**（两种）：\n\n### 1. 互斥锁\n- 使用 `redis_setnx`"
     },
     {
       "query": "缓存击穿方案的完整内容是什么？",
@@ -51,8 +51,8 @@
       "recall": true,
       "exact": false,
       "closed": true,
-      "steps": 4,
-      "answer_preview": "知识库中「缓存击穿方案」（文档 id=2）的完整内容如下：\n\n---\n\n## 缓存击穿方案\n\n**问题定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB），造成数据库过载。\n\n**核心方案**：\n1. **互斥锁（Mutex）"
+      "steps": 2,
+      "answer_preview": "# 缓存击穿方案（知识库文档 id=2）\n\n**文档状态**：ACTIVE（来源：MANUAL）\n\n## 完整内容\n\n**缓存击穿**：热点 Key 失效瞬间大量请求打 DB。\n\n**方案**：互斥锁、逻辑过期。\n\n使用 `redis_se"
     },
     {
       "query": "帮我计算 123 乘以 456",
@@ -68,7 +68,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "123 乘以 456 的结果是 **56088**。"
+      "answer_preview": "123 × 456 = **56088**。"
     },
     {
       "query": "现在几点？",
@@ -84,7 +84,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "现在是 **2026年8月10日 星期一，下午 14:50:38**。"
+      "answer_preview": "现在是 **2026年8月10日 星期一，下午 3:08（15:08）**。"
     },
     {
       "query": "对比缓存击穿和缓存穿透的解决方案",
@@ -96,15 +96,16 @@
       "predicted": [
         "search_knowledge",
         "search_knowledge",
-        "search_knowledge",
-        "search_knowledge"
+        "list_documents",
+        "get_document",
+        "get_document"
       ],
       "error": null,
       "recall": true,
-      "exact": true,
+      "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库中的相关文档，我对**缓存击穿**和**缓存穿透**的解决方案对比如下：\n\n## 缓存击穿（Cache Breakdown）\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库。\n\n**知识库给出的方案**（来源：缓"
+      "answer_preview": "基于知识库文档（`缓存击穿方案` id=2、`缓存穿透方案` id=3），对比如下：\n\n## 对比：缓存击穿 vs 缓存穿透\n\n| 维度 | 缓存击穿 | 缓存穿透 |\n|---|---|---|\n| **本质** | **热点 Key 失"
     },
     {
       "query": "你好",
@@ -116,7 +117,7 @@
       "exact": true,
       "closed": true,
       "steps": 1,
-      "answer_preview": "你好！我是 CodeAware Agent，很高兴为你服务。😊\n\n我可以帮你做这些事情：\n\n- **📚 检索知识库**：查询团队的技术文档、规范、设计文档、操作手册等\n- **🔍 查看文档**：获取知识库中特定文档的完整内容\n- **📋 列"
+      "answer_preview": "你好！我是 CodeAware Agent，很高兴为你服务。😊\n\n我可以帮你：\n- 📚 **检索知识库**：查找技术文档、规范、设计文档、团队约定等\n- 📄 **查看文档详情**：获取知识库中文档的完整内容\n- 🔢 **精确计算**：处理数"
     }
   ]
 }

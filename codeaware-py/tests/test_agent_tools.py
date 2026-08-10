@@ -74,7 +74,8 @@ async def test_search_knowledge_finds_chunk(toolkit, rag_service, db_session):
     await db_session.commit()  # 工具新 session 需读到已提交数据
     tools = _tool_map(toolkit)
     result = await tools["search_knowledge"].ainvoke({"query": "缓存击穿", "top_k": 3})
-    assert "缓存击穿" in result
+    assert "缓存击穿" in result.display
+    assert result.doc_ids  # 检索到文档，doc_ids 非空
 
 
 async def test_search_knowledge_no_hit_empty_kb(toolkit, db_session):
@@ -92,7 +93,8 @@ async def test_search_knowledge_no_hit_empty_kb(toolkit, db_session):
     await db_session.commit()
     tools = _tool_map(toolkit)
     result = await tools["search_knowledge"].ainvoke({"query": "缓存击穿", "top_k": 3})
-    assert "未检索到相关内容" in result
+    assert "未检索到相关内容" in result.display
+    assert not result.doc_ids  # 空库：无 doc_ids
 
 
 async def test_get_document_returns_full_text(toolkit, rag_service, db_session):
@@ -104,14 +106,16 @@ async def test_get_document_returns_full_text(toolkit, rag_service, db_session):
     await db_session.commit()
     tools = _tool_map(toolkit)
     result = await tools["get_document"].ainvoke({"document_id": doc.id})
-    assert "部署手册" in result
-    assert "PostgreSQL" in result
+    assert "部署手册" in result.display
+    assert "PostgreSQL" in result.display
+    assert result.doc_ids == frozenset({doc.id})  # get_document 签名 = 该文档 id
 
 
 async def test_get_document_missing(toolkit):
     tools = _tool_map(toolkit)
     result = await tools["get_document"].ainvoke({"document_id": 999999})
-    assert "不存在" in result
+    assert "不存在" in result.display
+    assert not result.doc_ids
 
 
 async def test_list_documents_lists_uploaded(toolkit, rag_service, db_session):

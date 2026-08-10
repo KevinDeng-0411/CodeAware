@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, Sys
 from langchain_core.tools import tool
 
 from app.ai.agent.react_loop import ReactLoopState, react_loop
+from app.ai.agent.tools import ToolObservation
 
 
 @tool
@@ -22,6 +23,12 @@ async def fake_calc(expression: str) -> str:
 async def fake_get_doc(document_id: int) -> str:
     """mock 文档工具（无上限时应被限制）。"""
     return f"doc:{document_id}"
+
+
+@tool
+async def fake_search(query: str) -> ToolObservation:
+    """mock 检索工具（固定返回 doc {1,2}，用于收敛检测）。"""
+    return ToolObservation(display=f"结果:{query}", doc_ids=frozenset({1, 2}))
 
 
 class FakeAgentLLM:
@@ -174,3 +181,37 @@ async def test_react_loop_tool_call_limit():
     assert len(ok_results) == 2
     assert len(limited_results) >= 1
     assert "上限" in limited_results[0].result
+
+
+async def test_react_loop_convergence_detection():
+    """检索收敛检测：换 query 但返回相同 doc_ids（无新文档）→ 强制终答。
+
+    用不同参数（query 缓存击穿/缓存穿透）避免 seen_calls 拦截，fake_search 固定返回
+    {1,2}。第一轮 observed 空 → 累积；第二轮 {1,2} ⊆ observed → 收敛强制停。
+    """
+    model = FakeAgentLLM([
+        {"reasoning": "", "tool_calls": [{"name": "fake_search", "args": {"query": "缓存击穿"}, "id": "call_1"}]},
+        {"reasoning": "", "content": "基于检索结果回答", "tool_calls": [{"name": "fake_search", "args": {"query": "缓存穿透"}, "id": "call_2"}]},
+    ])
+    state, events, messages = await _run(model, {"fake_search": fake_search}, max_steps=5)
+    # 收敛检测触发，提前停（steps=2 < max_steps=5），text 用第二轮 content
+    assert state.steps == 2
+    assert state.text == "基于检索结果回答"
+
+
+async def test_react_loop_convergence_not_triggered_on_new_docs():
+    """不同 doc_ids 不算收敛：每轮新文档 → 正常继续到终答。"""
+    @tool
+    async def fake_search_varying(query: str) -> ToolObservation:
+        """按 query 长度返回不同 doc id，模拟'换 query 带来新文档'。"""
+        return ToolObservation(display=f"结果:{query}", doc_ids=frozenset({len(query)}))
+
+    model = FakeAgentLLM([
+        {"reasoning": "", "tool_calls": [{"name": "fake_search_varying", "args": {"query": "ab"}, "id": "call_1"}]},
+        {"reasoning": "", "tool_calls": [{"name": "fake_search_varying", "args": {"query": "abc"}, "id": "call_2"}]},
+        {"reasoning": "", "content": "综合两个查询的结果回答"},
+    ])
+    state, events, messages = await _run(model, {"fake_search_varying": fake_search_varying}, max_steps=5)
+    # 两轮各返回新 doc（ab→{2}, abc→{3}），不收敛，正常到第 3 轮终答
+    assert state.steps == 3
+    assert state.text == "综合两个查询的结果回答"
