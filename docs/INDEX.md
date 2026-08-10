@@ -8,12 +8,11 @@
 1. 要编码某功能 -> 在下表查「功能」行 -> 读对应 ADR 与当前执行卡。
 2. ADR 负责长期语义；`current-release/` 负责 C1–C3 当前版本与 C4 BM25 增强实施；
    `migration/` 只作迁移历史与背景。
-3. 当前先按[升级总入口](roadmap/README.md)完成 C1–C4；只有
-   [机器可校验证据](roadmap/证据清单与解锁规则.md)可以改变阶段状态。
-4. Chat → Agent 是锁定的未来方向；个人项目默认按
-   [`personal-local-readonly`](roadmap/chat-to-agent/personal/README.md) 的
-   `S1-lite → S2-lite → S4-lite → S5-lite` 实施，C4 后仍需逐卡另行授权。
-5. 所有 coding agent 共用的编码铁律、技术栈、目录结构见根目录 `AGENTS.md`。
+3. 当前已交付 C1–C6 + 检索优化 + **Agent 模式（CHAT_MODE=rag|agent，ADR-0016）**；阶段状态由
+   [机器可校验证据](roadmap/证据清单与解锁规则.md) 管理。
+4. **chat-to-agent 规划已翻篇**：不再是硬门禁/严格遵循，仅作后续方向参考
+   （多 Agent / checkpoint / 外部动作工具）。Agent 模式当前为检索层决策形态。
+5. 所有 coding agent 共用的编码铁律、技术栈、目录结构见根目录 `AGENTS.md`；**后续编程助手优先读根目录 `CLAUDE.md`（索引适配）**。
 
 ## 功能 -> 文档映射
 
@@ -24,7 +23,7 @@
 | 后续升级 / 缺口与预留 | - | [后续升级计划](migration/后续升级计划.md) | - |
 | 当前版本与检索增强 | [ADR-0001~0007](decisions/adr/) | - | [C1–C4](roadmap/current-release/README.md) · [C4 BM25](roadmap/current-release/04-BM25检索增强.md) · [证据模板](roadmap/current-release/验收证据模板.md) |
 | 阶段解锁 / 机器可校验证据 | - | - | [证据清单与解锁规则](roadmap/证据清单与解锁规则.md) |
-| Chat → Agent 个人默认路线（未来、锁定） | [ADR-0007](decisions/adr/0007-core-domain-and-bounded-contexts.md) | - | [个人路线](roadmap/chat-to-agent/personal/README.md) · [总入口](roadmap/chat-to-agent/README.md) · [公共契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
+| Chat → Agent 后续方向（参考，非硬门禁） | [ADR-0016](decisions/adr/0016-react-agent-evaluation.md) | - | [总入口](roadmap/chat-to-agent/README.md) · [个人路线](roadmap/chat-to-agent/personal/README.md) · [公共契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
 | 技术选型 / AI 搜索 / Agent 能力地图 | [ADR-0007](decisions/adr/0007-core-domain-and-bounded-contexts.md) | - | [技术选型与能力地图](roadmap/技术选型与能力地图.md) |
 | Agent Tool / Citation / SSE 事件 | - | - | [精简 S4](roadmap/chat-to-agent/personal/S4-只读工具Agent.md) · [公共契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
 | Agent Run / Artifact / Approval（条件型） | - | - | [可选升级触发条件](roadmap/chat-to-agent/personal/可选升级触发条件.md) · [平台参考契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
@@ -81,7 +80,7 @@
 | [migration/Python重构迁移文档.md](migration/Python重构迁移文档.md) | Java → Python 历史迁移记录（含 ADR 索引；不再直接下发任务） |
 | [migration/testing-notes.md](migration/testing-notes.md) | 测试与集成踩坑留痕（langchain 导入 hang / test_migration 性能 / 异步客户端 loop） |
 | [migration/后续升级计划.md](migration/后续升级计划.md) | 历史缺口和旧 U1–U5 预留，仅作背景；实施以 current-release 与个人路线为准 |
-| [decisions/adr/](decisions/adr/) | 7 份架构决策记录 0001~0007 |
+| [decisions/adr/](decisions/adr/) | 16 份架构决策记录 0001~0016 |
 | [decisions/glossary.md](decisions/glossary.md) | 领域术语表（10 术语全 settled） |
 | [integration/deepseek-notes.md](integration/deepseek-notes.md) | DeepSeek thinking/非思考模式集成约定 |
 | [interview/面试准备指南.md](interview/面试准备指南.md) | 面试讲解与追问话术 |
@@ -105,4 +104,4 @@
 | [0013](decisions/adr/0013-document-management-soft-delete.md) | 文档管理：软删行 + 物理删分块 + 列表 + replace 更新 |
 | [0014](decisions/adr/0014-langchain-thin-adapter-no-langgraph.md) | LangChain 薄 adapter：仅 config.py 一处 import，完整 Agent 不引入 |
 | [0015](decisions/adr/0015-langgraph-retrieval-enhancement.md) | LangGraph 检索增强：智能路由 + 自我纠错（路由准确率 60/60，决策变更见 ADR-0014） |
-| [0016](decisions/adr/0016-react-agent-evaluation.md) | ReAct Agent 升级评估：thinking tool calling 原型验证通过，当前不实施完整 ReAct（留重启条件） |
+| [0016](decisions/adr/0016-react-agent-evaluation.md) | ReAct Agent 模式：先评估暂缓 → 实施 CHAT_MODE=agent 双模式（5 工具 + ReAct 循环 + 停止判断优化） |
