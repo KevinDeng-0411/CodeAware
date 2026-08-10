@@ -140,6 +140,11 @@ graph TB
             RR["CrossEncoderReranker<br/>ONNX bge-reranker-v2-m3"]
             PT["PromptTemplate<br/>versioned"]
         end
+
+        subgraph Agent["Agent Mode (CHAT_MODE=agent, ADR-0016)"]
+            RL["ReAct Loop<br/>thinking 回注 + 防打转 + 步数上限"]
+            AT["AgentToolkit<br/>search / get_doc / list / calc / time"]
+        end
     end
 
     subgraph Orchestration["Orchestration Layer"]
@@ -159,7 +164,10 @@ graph TB
     React -->|"typed SSE (10 events)"| Router
     Router --> Auth
     Auth --> TC
-    TC --> Context
+    TC -->|"rag mode"| Context
+    TC -->|"agent mode"| RL
+    RL --> AT
+    AT --> RAG
     RAG --> LG
     RAG --> RR
     TC -->|"submit async task"| Celery
