@@ -180,7 +180,7 @@ graph TB
     TC -->|"发送事件"| Kafka
 ```
 
-### 2. 核心交互时序图
+### 2. Chat/RAG 模式：核心交互时序图
 
 ```mermaid
 sequenceDiagram
@@ -225,7 +225,25 @@ flowchart TD
     F -->|达上限 或 query 重复| I[返回「未找到」<br/>+ context.warning]
 ```
 
-### 4. 系统上下文/边界图
+### 4. Agent 模式：ReAct 循环（CHAT_MODE=agent）
+
+```mermaid
+flowchart TD
+    A[用户消息] --> B[构造 messages<br/>记忆 + 历史 + 摘要<br/>跳过 RAG 预检索]
+    B --> C[模型 astream<br/>bind_tools 自主决策]
+    C --> D{有工具调用?}
+    D -->|否| E[终答<br/>基于工具观察结果]
+    D -->|是| F[执行工具<br/>search_knowledge / get_document<br/>list_documents / calculate / 时间]
+    F --> G[回注 ToolMessage<br/>携带 reasoning_content]
+    G --> H{达步数上限?<br/>或 重复调用}
+    H -->|否| C
+    H -->|是| E
+    E --> I[持久化 ASSISTANT<br/>Transaction B]
+    I --> J[post-turn<br/>摘要 + 记忆抽取]
+    J --> K[chat.completed]
+```
+
+### 5. 系统上下文/边界图
 
 ```mermaid
 flowchart LR

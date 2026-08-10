@@ -181,7 +181,7 @@ graph TB
     TC -->|"emit events"| Kafka
 ```
 
-### 2. Core Interaction Sequence
+### 2. Chat/RAG Mode: Core Interaction Sequence
 
 ```mermaid
 sequenceDiagram
@@ -226,7 +226,25 @@ flowchart TD
     F -->|limit reached or duplicate query| I[return 「not found」<br/>+ context.warning]
 ```
 
-### 4. System Context / Boundary
+### 4. Agent Mode: ReAct Loop (CHAT_MODE=agent)
+
+```mermaid
+flowchart TD
+    A[User message] --> B[Build messages<br/>memory + history + summary<br/>skip RAG pre-retrieval]
+    B --> C[Model astream<br/>bind_tools auto decision]
+    C --> D{Tool calls?}
+    D -->|no| E[Final answer<br/>based on tool observations]
+    D -->|yes| F[Execute tool<br/>search_knowledge / get_document<br/>list_documents / calculate / time]
+    F --> G[Append ToolMessage<br/>carry reasoning_content]
+    G --> H{Max steps reached?<br/>or duplicate call}
+    H -->|no| C
+    H -->|yes| E
+    E --> I[Persist ASSISTANT<br/>Transaction B]
+    I --> J[Post-turn<br/>summary + memory extract]
+    J --> K[chat.completed]
+```
+
+### 5. System Context / Boundary
 
 ```mermaid
 flowchart LR
