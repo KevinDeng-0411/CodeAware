@@ -58,6 +58,8 @@ class RagService:
             doc = Document(title=title, source_type=source_type, project_name=project_name, content=content)
             self.session.add(doc)
             await self.session.flush()
+            # P0-4: commit 后再派发，避免 Celery worker 读到未提交 doc（主事务未提交时 MVCC 不可见）
+            await self.session.commit()
             from app.ai.tasks.document_parse import parse_document_task
             async_result = parse_document_task.delay(doc.id, title, content, source_type, project_name)
             doc._task_id = async_result.task_id
@@ -129,7 +131,12 @@ class RagService:
         all_results.sort(key=lambda x: x.score, reverse=True)
         return all_results[:top_k]
 
-    def format_context(self, results: list[ScoredChunk]) -> str:
+    @staticmethod
+    def format_context(results: list[ScoredChunk]) -> str:
+        """纯函数：ScoredChunk 列表 -> 检索结果 markdown（不需 session）。
+
+        P0-2: 改为静态方法，避免调用方为 format_context 持有 DB session。
+        """
         if not results:
             return ""
         parts = ["## 相关知识库文档\n"]

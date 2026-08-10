@@ -192,12 +192,10 @@ class TurnCoordinator:
                         Conversation.conversation_id == conversation_id
                     )
                     if user_id is not None:
-                        # 归属校验：不匹配的会话视为不存在（404，不泄露存在性）。
-                        # user_id 为 null 的会话（直连测试/遗留）对所有用户可见。
-                        stmt = stmt.where(
-                            (Conversation.user_id == user_id)
-                            | (Conversation.user_id.is_(None))
-                        )
+                        # 归属校验（P0-5 收紧）：登录用户只见自己的会话（user_id 精确匹配）；
+                        # 无主会话（user_id IS NULL，直连测试/遗留）不再对所有用户可见。
+                        # 直连调用（user_id=None）不受影响，仍见全部（向后兼容测试/遗留）。
+                        stmt = stmt.where(Conversation.user_id == user_id)
                     exists = await session.scalar(stmt)
             except Exception as exc:
                 logger.warning(

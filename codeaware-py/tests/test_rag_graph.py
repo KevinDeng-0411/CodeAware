@@ -110,7 +110,7 @@ class _FakeRewriteLLM:
         return _R()
 
 
-def _make_graph(engine):
+def _make_graph(engine, reranker=None):
     from app.ai.rag.query_rewriter import QueryRewriter
 
     class _FakeVR:
@@ -145,6 +145,7 @@ def _make_graph(engine):
         query_rewriter=QueryRewriter(_FakeRewriteLLM()),
         session_factory=session_factory,
         retriever_factory=lambda _s: _FakeRetriever(),
+        reranker=reranker,
     )
 
 
@@ -156,6 +157,29 @@ async def test_graph_retries_on_unsatisfied_then_satisfies():
     assert result.route == "retrieve"
     assert not result.direct
     assert result.docs  # 重试后命中
+
+
+class _FakeReranker:
+    """记录 rerank 调用（P0-1 验证 graph 路径接入精排）。"""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def rerank(self, query, candidates, top_k):
+        self.calls.append({"query": query, "top_k": top_k, "n_candidates": len(candidates)})
+        return candidates[:top_k]
+
+
+async def test_graph_uses_reranker_on_retrieve():
+    """P0-1: graph 路径应接入 reranker（_rag_node 传 rerank_query → use_rerank=True）。"""
+    engine = _FakeSearchEngine()
+    reranker = _FakeReranker()
+    graph = _make_graph(engine, reranker=reranker)
+    result = await graph.run("缓存击穿")
+    assert reranker.calls, "graph 路径应调用 reranker（此前绕过精排）"
+    assert reranker.calls[0]["query"] == "缓存击穿"
+    assert reranker.calls[0]["top_k"] == 5
+    assert result.route == "retrieve"
 
 
 async def test_graph_direct_path_skips_retrieval():

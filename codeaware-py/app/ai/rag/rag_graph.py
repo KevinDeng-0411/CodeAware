@@ -125,20 +125,24 @@ class RagGraph:
         return {"route": route, "queries": [state["message"]], "retries": 0}
 
     async def _rag_node(self, state: RagState) -> dict:
-        """检索：短事务 + 复用 RagService.prepare_search + search_prepared。"""
+        """检索：短事务 + 复用 RagService.prepare_search + search_prepared。
+
+        P0-1: 传入 rerank_query 启用 ONNX 精排（粗排候选池 20 → 精排 top5，与 service 路径一致）。
+        P0-2: session 用 async with 生命周期管理（此前泄漏连接池）。
+        """
         query = state["queries"][-1]
-        session = await self._session()
-        hybrid = self._make_retriever(session)
-        rag = RagService(
-            session,
-            self.chunker,
-            self.vector_recall,
-            self.query_rewriter,
-            hybrid,
-            self.reranker,
-        )
-        prepared = await rag.prepare_search(query)
-        docs = await rag.search_prepared(prepared, top_k=5)
+        async with await self._session() as session:
+            hybrid = self._make_retriever(session)
+            rag = RagService(
+                session,
+                self.chunker,
+                self.vector_recall,
+                self.query_rewriter,
+                hybrid,
+                self.reranker,
+            )
+            prepared = await rag.prepare_search(query)
+            docs = await rag.search_prepared(prepared, top_k=5, rerank_query=query)
         return {"docs": docs, "satisfied": False}
 
     async def _evaluate_node(self, state: RagState) -> dict:
@@ -213,18 +217,9 @@ class RagGraph:
             result.warnings.append(("route", "ROUTE_DIRECT", "已判定为常识问题，未检索知识库"))
             return result
         # 检索路径：format_context + refs（对齐 turn_coordinator 现有逻辑）
+        # P0-2: format_context 是纯函数（不需 session），移除冗余 session 构造（此前泄漏连接池）
         docs = result.docs
-        session = await self._session()
-        hybrid = self._make_retriever(session)
-        rag = RagService(
-            session,
-            self.chunker,
-            self.vector_recall,
-            self.query_rewriter,
-            hybrid,
-            self.reranker,
-        )
-        result.context = rag.format_context(docs)
+        result.context = RagService.format_context(docs)
         if docs:
             from sqlalchemy import select
 

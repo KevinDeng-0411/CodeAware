@@ -147,6 +147,7 @@ async def _seed_conversation(
     *,
     summary: str | None = None,
     watermark: int = 0,
+    user_id: int | None = None,
 ) -> None:
     async with AsyncSessionLocal() as session:
         session.add(
@@ -155,6 +156,7 @@ async def _seed_conversation(
                 title=cid,
                 summary=summary,
                 summary_message_count=watermark,
+                user_id=user_id,  # P0-5：登录用户访问需归属匹配（否则 404）
             )
         )
         for index in range(count):
@@ -254,10 +256,10 @@ async def test_c1b_demo_threshold_idempotency_and_prompt_use(
 
 
 async def test_c1b_demo_stream_summary_cache_failure_warns_and_completes(
-    client, redis_client, vector_recall, chunker
+    client, redis_client, vector_recall, chunker, default_user
 ):
     cid = "c1b-stream-cache-warning"
-    await _seed_conversation(cid, 8)
+    await _seed_conversation(cid, 8, user_id=default_user.id)
     llm = _SummaryLLM(summary_result="PG survives Redis")
     coordinator = _coordinator(
         _SummarySetFailingRedis(redis_client),
@@ -472,10 +474,10 @@ async def test_summary_pg_commit_failure_does_not_refresh_redis(
 
 
 async def test_redis_unavailable_from_turn_start_keeps_pg_summary(
-    client, redis_client, vector_recall, chunker
+    client, redis_client, vector_recall, chunker, default_user
 ):
     cid = "c1b-redis-down"
-    await _seed_conversation(cid, 8)
+    await _seed_conversation(cid, 8, user_id=default_user.id)
     coordinator = _coordinator(
         _UnavailableRedis(redis_client),
         vector_recall,
@@ -493,6 +495,20 @@ async def test_redis_unavailable_from_turn_start_keeps_pg_summary(
     assert any(w["component"] == "summary_cache" for w in warnings)
     assert any(w["component"] == "message_cache" for w in warnings)
     assert await _state(cid) == ("PG truth", 10, 10)
+
+
+async def test_p0_5_login_user_cannot_access_orphan_conversation(client, default_user):
+    """P0-5: 登录用户不能访问无主会话（user_id IS NULL）——404（此前对所有用户可见）。"""
+    cid = "orphan-conv-p0-5"
+    async with AsyncSessionLocal() as session:
+        session.add(Conversation(conversation_id=cid, title=cid))
+        await session.commit()
+
+    response = await client.post(
+        "/api/chat/send/stream",
+        json={"conversation_id": cid, "message": "hi"},
+    )
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize(
