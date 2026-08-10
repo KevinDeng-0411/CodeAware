@@ -1,0 +1,122 @@
+{
+  "n": 6,
+  "tool_selection": {
+    "recall_mean": 1.0,
+    "exact_mean": 0.667,
+    "recall_ok": 6
+  },
+  "closure": {
+    "closed_mean": 1.0,
+    "closed_ok": 6,
+    "avg_steps": 2.67
+  },
+  "direct": {
+    "n": 1,
+    "no_tool": 1,
+    "no_tool_rate": 1.0
+  },
+  "rows": [
+    {
+      "query": "缓存击穿怎么解决？",
+      "category": "need_search",
+      "expected": [
+        "search_knowledge"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 4,
+      "answer_preview": "根据知识库文档（《缓存击穿方案》，id=2），缓存击穿及其解决方案如下：\n\n## 缓存击穿问题\n\n**定义**：某个**热点 Key** 在失效的瞬间，大量并发请求同时打到数据库（DB），导致数据库过载。\n\n> 注意与另外两个问题的区别：\n"
+    },
+    {
+      "query": "缓存击穿方案的完整内容是什么？",
+      "category": "need_doc",
+      "expected": [
+        "search_knowledge",
+        "get_document"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "list_documents",
+        "get_document"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": false,
+      "closed": true,
+      "steps": 4,
+      "answer_preview": "知识库中「缓存击穿方案」（文档 id=2）的完整内容如下：\n\n---\n\n## 缓存击穿方案\n\n**问题定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB），造成数据库过载。\n\n**核心方案**：\n1. **互斥锁（Mutex）"
+    },
+    {
+      "query": "帮我计算 123 乘以 456",
+      "category": "need_calc",
+      "expected": [
+        "calculate"
+      ],
+      "predicted": [
+        "calculate"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "123 乘以 456 的结果是 **56088**。"
+    },
+    {
+      "query": "现在几点？",
+      "category": "need_time",
+      "expected": [
+        "get_current_time"
+      ],
+      "predicted": [
+        "get_current_time"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 2,
+      "answer_preview": "现在是 **2026年8月10日 星期一，下午 14:50:38**。"
+    },
+    {
+      "query": "对比缓存击穿和缓存穿透的解决方案",
+      "category": "multi_step",
+      "expected": [
+        "search_knowledge",
+        "search_knowledge"
+      ],
+      "predicted": [
+        "search_knowledge",
+        "search_knowledge",
+        "search_knowledge",
+        "search_knowledge"
+      ],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 3,
+      "answer_preview": "根据知识库中的相关文档，我对**缓存击穿**和**缓存穿透**的解决方案对比如下：\n\n## 缓存击穿（Cache Breakdown）\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库。\n\n**知识库给出的方案**（来源：缓"
+    },
+    {
+      "query": "你好",
+      "category": "direct",
+      "expected": [],
+      "predicted": [],
+      "error": null,
+      "recall": true,
+      "exact": true,
+      "closed": true,
+      "steps": 1,
+      "answer_preview": "你好！我是 CodeAware Agent，很高兴为你服务。😊\n\n我可以帮你做这些事情：\n\n- **📚 检索知识库**：查询团队的技术文档、规范、设计文档、操作手册等\n- **🔍 查看文档**：获取知识库中特定文档的完整内容\n- **📋 列"
+    }
+  ]
+}

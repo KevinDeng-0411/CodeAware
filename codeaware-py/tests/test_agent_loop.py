@@ -18,6 +18,12 @@ async def fake_calc(expression: str) -> str:
     return f"fake:{expression}"
 
 
+@tool
+async def fake_get_doc(document_id: int) -> str:
+    """mock 文档工具（无上限时应被限制）。"""
+    return f"doc:{document_id}"
+
+
 class FakeAgentLLM:
     """模拟 ChatDeepSeek.bind_tools + astream：按调用次数返回预设轮次。
 
@@ -151,3 +157,20 @@ async def test_react_loop_max_steps_bound():
     assert state.steps == 3
     # 未收敛，但状态机安全退出（无异常）
     assert isinstance(state.text, str)
+
+
+async def test_react_loop_tool_call_limit():
+    """防过度调用：同工具超过单轮上限后不再执行（eval 实证模型反复 get_document 发散）。"""
+    model = FakeAgentLLM([
+        # 连续 4 轮都调 fake_get_doc（不同 id），第 4 次应被上限拦截
+        {"reasoning": "", "tool_calls": [{"name": "fake_get_doc", "args": {"document_id": i}, "id": f"call_{i}"}]}
+        for i in range(4)
+    ] + [{"reasoning": "", "content": "基于已有信息回答"}])
+    state, events, messages = await _run(model, {"fake_get_doc": fake_get_doc}, max_steps=5)
+    results = [e for e in events if type(e).__name__ == "ToolResult"]
+    # get_document 上限 2 次：第 1、2 次执行（ok），第 3 次起被限制（error + 上限提示）
+    ok_results = [r for r in results if r.status == "ok"]
+    limited_results = [r for r in results if r.status == "error"]
+    assert len(ok_results) == 2
+    assert len(limited_results) >= 1
+    assert "上限" in limited_results[0].result

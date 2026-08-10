@@ -23,6 +23,7 @@
 | 文档管理（软删+列表+更新） | ✅ 已实施 | [ADR-0013](../decisions/adr/0013-document-management-soft-delete.md) | 软删行+物理删分块 |
 | Reranker 二阶段精排 | ✅ 已落地（ONNX） | [ADR-0009 re-evaluated](../decisions/adr/0009-reranker-deferred.md) | ONNX 绕开 torch，MRR 0.883→0.941 |
 | 意图识别 | ❌ 评估后不做 | 面试指南 §6.15 | 90% 知识问题，加分类引入漏检 |
+| Agent 工具决策 + 闭环 | ✅ 已评估 | [agent-eval.md](agent-eval.md) | recall 1.0 / 闭环率 1.0（eval 驱动修复过度调用） |
 
 ## 决策优先级原则
 
@@ -45,4 +46,5 @@ jieba 中文 BM25（R@5 +0.34） > Reranker ONNX 落地（MRR +0.058） > top_k 
 
 - 检索基线：`codeaware-py/tests/eval/artifacts/baseline_c{3,4}_*.json`
 - 敏感分析：`codeaware-py/tests/eval/artifacts/topk_ablation.json`
+- Agent 评估：`codeaware-py/tests/eval/artifacts/agent_eval.json`
 - 60 条 golden cases（15 篇 fixture 文档），真实 bge-m3 embedding

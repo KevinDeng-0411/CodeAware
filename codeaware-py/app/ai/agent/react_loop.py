@@ -20,6 +20,15 @@ from app.schemas.chat_events import ReasoningDelta, TokenDelta, ToolCall, ToolRe
 DEFAULT_MAX_STEPS = 4
 # observation 回注模型的最大字符数（工具结果截断，避免撑爆上下文）
 MAX_TOOL_RESULT_CHARS = 2000
+# per-tool 单轮调用上限（防过度调用：模型对信息不满足时反复取文档/检索发散，
+# eval 实证 simple question 调 6 次 get_document 达步数上限。超限后该工具返回提示）
+TOOL_CALL_LIMITS = {
+    "search_knowledge": 3,
+    "get_document": 2,
+    "list_documents": 1,
+    "calculate": 2,
+    "get_current_time": 1,
+}
 
 
 @dataclass
@@ -62,6 +71,7 @@ async def react_loop(
     state: 结束时填充 text / steps
     """
     seen_calls: set[tuple[str, str]] = set()
+    tool_counts: dict[str, int] = {}
     for step in range(max_steps):
         # ---- 1. astream 聚合（含流式 yield reasoning/token）----
         accumulated = None
@@ -122,9 +132,18 @@ async def react_loop(
                 tool_name=name, tool_args=args, tool_call_id=tc["id"],
             )
 
+            # 防过度调用：同工具调用次数超上限则不再执行（eval 实证模型会反复取文档发散）
+            tool_counts[name] = tool_counts.get(name, 0) + 1
+            limit = TOOL_CALL_LIMITS.get(name, 2)
             # 防打转：相同 (工具, 参数) 跳过重复执行
             seen_key = (name, str(sorted((args or {}).items())))
-            if seen_key in seen_calls:
+            if tool_counts[name] > limit:
+                result, ok = (
+                    f"工具 {name} 已调用 {tool_counts[name]} 次（单轮上限 {limit}），"
+                    "请基于已有信息直接回答，不要继续调用该工具。",
+                    False,
+                )
+            elif seen_key in seen_calls:
                 result, ok = "该工具与参数组合已调用过，请基于已有结果回答或换一种问法。", False
             else:
                 seen_calls.add(seen_key)
