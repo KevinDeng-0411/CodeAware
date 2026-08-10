@@ -30,7 +30,7 @@ The current core deliverable is a **Chat/RAG knowledge-base Q&A app**: upload te
 | 🧠 **Streamed chain-of-thought** | DeepSeek `reasoning_content` streamed separately from the answer (10-event typed SSE) — the model's reasoning is visible |
 | 🇨🇳 **Chinese retrieval optimization** | jieba segmentation makes Chinese BM25 usable (exact Chinese R@5: 0.25 → **1.000**) |
 | 🔀 **Smart routing + self-correction** | LangGraph orchestration: common-sense questions skip retrieval (saves latency); weak retrieval triggers query rewriting & retry (ADR-0015) |
-| 🤖 **Agent mode** | `CHAT_MODE=agent` enables ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning with visible tool trace (ADR-0016) |
+| 🤖 **Agent mode** | `CHAT_MODE=agent` enables ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning with visible tool trace, convergence-aware stop (eval: avg_steps 2.28, closure 1.0) — ADR-0016 |
 | 👥 **Team-ready** | JWT auth, per-user conversation isolation, shared knowledge base & memory (lab scenario) |
 | 📚 **Document management** | List / detail (chunk visualization) / soft delete / replace-update (ADR-0013) |
 | 🧩 **Long-term memory** | Facts auto-extracted from conversations + pgvector recall — team context persists across sessions |
@@ -142,7 +142,7 @@ graph TB
         end
 
         subgraph Agent["Agent Mode (CHAT_MODE=agent, ADR-0016)"]
-            RL["ReAct Loop<br/>thinking 回注 + 防打转 + 步数上限"]
+            RL["ReAct Loop<br/>thinking 回注 + 防打转 + 收敛检测"]
             AT["AgentToolkit<br/>search / get_doc / list / calc / time"]
         end
     end
@@ -236,7 +236,7 @@ flowchart TD
     D -->|no| E[Final answer<br/>based on tool observations]
     D -->|yes| F[Execute tool<br/>search_knowledge / get_document<br/>list_documents / calculate / time]
     F --> G[Append ToolMessage<br/>carry reasoning_content]
-    G --> H{Max steps reached?<br/>or duplicate call}
+    G --> H{信息足够?<br/>检索收敛(无新文档)<br/>或 达步数上限}
     H -->|no| C
     H -->|yes| E
     E --> I[Persist ASSISTANT<br/>Transaction B]

@@ -30,6 +30,7 @@ AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代�
 | 🧠 **思考过程流式** | DeepSeek reasoning_content 与回答分离推送（10 事件 typed SSE），可见"模型如何推理" |
 | 🇨🇳 **中文检索优化** | jieba 分词让中文 BM25 从不可用变可用（中文精确 R@5: 0.25 → **1.000**） |
 | 🔀 **智能路由 + 自我纠错** | LangGraph 编排：常识问题跳过检索（省延迟）；检索不理想自动改写重试（ADR-0015） |
+| 🤖 **Agent 模式** | `CHAT_MODE=agent` 开启 ReAct 工具循环：模型自主选工具（知识检索/文档/计算/时间），多步推理 + 工具轨迹可视化 + 收敛感知停止（eval：avg_steps 2.28、闭环率 1.0）——ADR-0016 |
 | 👥 **团队化** | JWT 登录、会话按用户隔离、知识库/记忆全员共享（实验室场景） |
 | 📚 **文档管理** | 列表 / 详情（分块可视化）/ 软删除 / 替换更新（ADR-0013） |
 | 🧩 **长期记忆** | 对话事实自动抽取 + pgvector 向量召回，跨会话记住团队上下文 |
@@ -141,7 +142,7 @@ graph TB
         end
 
         subgraph Agent["Agent 模式 (CHAT_MODE=agent, ADR-0016)"]
-            RL["ReAct 循环<br/>thinking 回注 + 防打转 + 步数上限"]
+            RL["ReAct 循环<br/>thinking 回注 + 防打转 + 收敛检测"]
             AT["AgentToolkit<br/>检索 / 文档 / 列表 / 计算 / 时间"]
         end
     end
@@ -235,7 +236,7 @@ flowchart TD
     D -->|否| E[终答<br/>基于工具观察结果]
     D -->|是| F[执行工具<br/>search_knowledge / get_document<br/>list_documents / calculate / 时间]
     F --> G[回注 ToolMessage<br/>携带 reasoning_content]
-    G --> H{达步数上限?<br/>或 重复调用}
+    G --> H{信息足够?<br/>检索收敛(无新文档)<br/>或 达步数上限}
     H -->|否| C
     H -->|是| E
     E --> I[持久化 ASSISTANT<br/>Transaction B]
