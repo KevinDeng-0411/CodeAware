@@ -5,7 +5,7 @@
 # CodeAware
 
 An AI-driven developer productivity platform designed for **software engineering lab teams** (code review, onboarding new members, team knowledge retrieval).
-The current core deliverable is a **Chat/RAG knowledge-base Q&A app**: upload team documents → automatic parsing & chunking → intelligent Q&A with cited sources and chain-of-thought.
+The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybrid-retrieval Q&A (BM25 + pgvector + ONNX reranker) with cited sources and visible chain-of-thought; **Agent mode** runs a ReAct tool loop — the model autonomously picks tools (knowledge search / document fetch / calc / time) with a visible tool trace and convergence-aware stopping.
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)

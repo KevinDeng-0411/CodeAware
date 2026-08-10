@@ -5,7 +5,7 @@
 # CodeAware
 
 AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代码评审、新人培训、团队知识检索）。
-当前核心交付是 **Chat/RAG 知识库问答应用**：上传团队文档 → 自动解析分块 → 带引用来源和思考过程的智能问答。
+核心是**双模式 Chat**（`CHAT_MODE=rag|agent`）：**RAG 模式**做混合检索问答（BM25 + pgvector + ONNX reranker），带引用来源和可见思考过程；**Agent 模式**跑 ReAct 工具循环——模型自主选工具（知识检索/文档/计算/时间），带可见工具轨迹和收敛感知停止。
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)
