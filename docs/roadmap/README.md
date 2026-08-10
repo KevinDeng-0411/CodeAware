@@ -30,23 +30,20 @@
 
 ## 2. 硬门禁
 
-Chat → Agent 进入正式评审前，必须同时存在并通过验证：
+**已达成**：C1–C6 证据通过、检索优化（jieba / BM25 / reranker / LangGraph 检索增强）
+落地、**Agent 模式已授权实施**（`CHAT_MODE=rag|agent`，ADR-0016，v1.1.0+），Agent eval
+门禁过（recall 1.0 / closure 1.0 / direct 1.0）。
 
-- `current-release/evidence/C1/manifest.json`
-- `current-release/evidence/C2/manifest.json`
-- `current-release/evidence/C3/manifest.json`
-- `current-release/evidence/C4/manifest.json`
-- C4 证据中的“允许评审 Agent 路线”结论为是
-- 当前版本所有普通测试、前端检查和空环境启动均通过
+当前 Agent 模式为**检索层决策形态**：ReAct 工具循环，模型自主选工具（search/get_doc/
+list/calc/time），**不执行外部动作**。
 
-这只形成 `REVIEW_UNLOCKED`。首次 Agent 代码实施还必须在 C4 之后取得用户对 **S1**
-的明确授权，形成 `IMPLEMENTATION_UNLOCKED:S1`；以后每张默认卡都要在其全部直接依赖
-证据形成后重新授权。默认能力 DAG 是 `C4 → S1 → S2 → S4 → S5`，不按编号连续性
-推导。缺少任一项时：
+高阶 Agent 能力（多 Agent、AgentRun/checkpoint、sandbox/patch/shell/审批/Git 写入/MCP）
+仍按 chat-to-agent 档案（S1-lite → S2-lite → S4-lite → S5-lite）逐阶段授权，能力 DAG 是
+`C4 → S1 → S2 → S4 → S5`。缺少授权时：
 
 - 可以阅读、评审和调整 Agent 方向文档；
-- 不得安装 LangGraph、创建 Agent 表、开放 Tool、sandbox 或审批写操作；
-- 不得以“为 Agent 铺路”为由扩大当前修复范围。
+- 不得开放外部动作工具（sandbox/patch/shell/审批/Git 写入/MCP）或多 Agent；
+- 不得以"为 Agent 铺路"为由扩大当前范围。
 
 ## 3. 文档权威边界
 
