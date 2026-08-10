@@ -23,7 +23,7 @@
 | 文档管理（软删+列表+更新） | ✅ 已实施 | [ADR-0013](../decisions/adr/0013-document-management-soft-delete.md) | 软删行+物理删分块 |
 | Reranker 二阶段精排 | ✅ 已落地（ONNX） | [ADR-0009 re-evaluated](../decisions/adr/0009-reranker-deferred.md) | ONNX 绕开 torch，MRR 0.883→0.941 |
 | 意图识别 | ❌ 评估后不做 | 面试指南 §6.15 | 90% 知识问题，加分类引入漏检 |
-| Agent 工具决策 + 闭环 | ✅ 已评估 | [agent-eval.md](agent-eval.md) | recall 1.0 / 闭环率 1.0（eval 驱动修复过度调用） |
+| Agent 工具决策 + 闭环 | ✅ 已评估 | [agent-eval.md](agent-eval.md) | recall 1.0 / 闭环率 1.0 / avg_steps 2.17（eval 驱动 3 次迭代：死计数 → 模型自评 + 收敛检测） |
 
 ## 决策优先级原则
 
