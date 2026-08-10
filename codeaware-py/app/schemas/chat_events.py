@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 ProtocolVersion = Literal[1]
 
 # phase: 失败发生的阶段
-Phase = Literal["start", "context", "model", "persist", "post_turn", "cancelled"]
+Phase = Literal["start", "context", "model", "tool", "persist", "post_turn", "cancelled"]
 # component: 降级发生的子系统（不用异常类名）
 Component = Literal[
     "message_cache",
@@ -91,6 +91,29 @@ class ContextReferences(ChatEventBase):
     memory_refs: list[MemoryRef] = Field(default_factory=list)
 
 
+class ToolCall(ChatEventBase):
+    """Agent 模式（ADR-0016）：模型决定调用工具（工具名 + 参数）。
+
+    与 reasoning.delta 同哲学：展示过程，不持久化到消息表。
+    """
+
+    tool_name: str
+    tool_args: dict = Field(default_factory=dict)
+    tool_call_id: str
+
+
+class ToolResult(ChatEventBase):
+    """Agent 模式（ADR-0016）：工具执行结果（状态 + 摘要）。
+
+    result 为截断后的文本摘要（观察结果给前端展示），完整结果回注模型。
+    """
+
+    tool_call_id: str
+    tool_name: str
+    status: Literal["ok", "error"]
+    result: str
+
+
 class PostTurnWarning(ChatEventBase):
     """assistant 已持久化后的 post-turn 降级（摘要/记忆/缓存刷新）。"""
 
@@ -128,6 +151,8 @@ EVENT_TYPES = {
     "context.references": ContextReferences,
     "reasoning.delta": ReasoningDelta,
     "token.delta": TokenDelta,
+    "tool.call": ToolCall,
+    "tool.result": ToolResult,
     "post_turn.warning": PostTurnWarning,
     "chat.completed": ChatCompleted,
     "chat.failed": ChatFailed,

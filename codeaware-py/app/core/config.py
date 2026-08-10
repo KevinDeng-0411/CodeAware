@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # RAG 运行时（LangGraph 检索增强）：graph=智能路由+自我纠错 / service=原路径回退
     rag_runtime: str = "graph"  # 出问题改 "service" 一键回退
 
+    # Chat 模式（ADR-0016）：rag=确定性 RAG 状态机（默认） / agent=ReAct 工具循环
+    chat_mode: str = "rag"  # 出问题改 "rag" 一键回退（agent 模式动 SSE 协议，需前端同步）
+
     # Reranker（检索后语义精排，ADR-0009 重新评估引入）：Ollama bge-reranker-v2-m3
     reranker_enabled: bool = True  # 出问题改 False 一键关闭，回退纯 RRF
     reranker_model: str = "bge-reranker-v2-m3"

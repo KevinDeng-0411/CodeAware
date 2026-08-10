@@ -217,6 +217,71 @@ class ContextBuilder:
             return None, warnings, {"knowledge_refs": [], "memory_refs": []}
         return prompt, warnings, {"knowledge_refs": knowledge_refs, "memory_refs": memory_refs}
 
+    async def build_agent_messages(
+        self, cid, message, warn_callback, system_prompt: str
+    ):
+        """Agent 模式（ADR-0016）：构造初始 LangChain messages。
+
+        与 build() 复用数据加载（消息/摘要/长期记忆），但：
+        - 跳过 RAG 预检索（交给 search_knowledge 工具，agent 自主决策）
+        - 用 LangChain messages（System/Human/AI）而非字符串模板渲染
+        返回 (messages, warnings, refs)。
+        """
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        warnings: list[tuple[str, str, str]] = []
+        msgs, cache_failed = await self.load_messages(cid)
+        if cache_failed:
+            warnings.append(warn_callback(cid, "message_cache", "REDIS_UNAVAILABLE",
+                                          "消息缓存回填失败，已使用 PostgreSQL 真相"))
+        if msgs and msgs[-1].role == "USER" and msgs[-1].content == message:
+            msgs = msgs[:-1]
+
+        summary, summary_failed = await self.load_summary(cid)
+        if summary_failed:
+            warnings.append(warn_callback(cid, "summary_cache", "REDIS_UNAVAILABLE",
+                                          "摘要缓存读取失败，已使用 PostgreSQL 真相"))
+
+        memory_refs: list[dict] = []
+        long_ctx = ""
+        try:
+            memory_vector = await self.vector_recall.embed(message)
+            async with AsyncSessionLocal() as s:
+                recalled = await self.vector_recall.recall_by_vector(
+                    s, LongTermMemory, message, memory_vector,
+                    threshold=0.0, top_k=5,
+                )
+            if recalled:
+                long_ctx = "\n".join(
+                    f"- {memory[0].content} (相似度:{memory[1]:.2f})"
+                    for memory in recalled
+                )
+                memory_refs = [
+                    {
+                        "content": memory[0].content,
+                        "memory_type": memory[0].memory_type,
+                        "similarity": round(float(memory[1]), 4),
+                    }
+                    for memory in recalled
+                ]
+        except Exception:
+            warnings.append(warn_callback(cid, "memory_recall", "MEMORY_RECALL_FAILED",
+                                          "长期记忆召回降级"))
+
+        messages = [SystemMessage(content=system_prompt)]
+        if summary:
+            messages.append(SystemMessage(content=f"## 历史对话摘要\n{summary}"))
+        for m in msgs:
+            messages.append(
+                HumanMessage(content=m.content)
+                if m.role == "USER"
+                else AIMessage(content=m.content)
+            )
+        if long_ctx:
+            messages.append(SystemMessage(content=f"## 长期记忆\n{long_ctx}"))
+        messages.append(HumanMessage(content=message))
+        return messages, warnings, {"knowledge_refs": [], "memory_refs": memory_refs}
+
     async def _render_prompt(self, params: dict) -> str | None:
         """渲染 CHAT 模板。"""
         from app.ai.prompt.template_manager import PromptTemplateManager

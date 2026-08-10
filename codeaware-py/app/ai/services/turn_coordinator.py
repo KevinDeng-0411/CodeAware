@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import select
 
+from app.ai.agent.react_loop import ReactLoopState, react_loop
+from app.ai.agent.tools import AgentToolkit
 from app.ai.config import get_reranker
 from app.ai.memory.long_term import LongTermMemoryManager
 from app.ai.memory.short_term import ShortTermMemoryManager, MessageEntry
@@ -263,18 +265,51 @@ class TurnCoordinator:
                 )
 
             # ---- build context (exclude current USER) ----
-            prompt, ctx_warns, refs = await self._build_context(cid, message)
-            if prompt is None:
-                self._log_failure(
-                    cid, turn_id, "context", "prompt_context", "CONTEXT_FAILED"
-                )
-                yield ChatFailed(
-                    conversation_id=cid, turn_id=turn_id, sequence=nxt(), phase="context",
-                    error=ErrorInfo(code="CONTEXT_FAILED", message="上下文构建失败", retryable=True),
-                    partial_output_persisted=False,
-                )
-                terminal_emitted = True
-                return
+            # CHAT_MODE（ADR-0016）：rag=确定性状态机 / agent=ReAct 工具循环
+            agent_mode = settings.chat_mode == "agent"
+            prompt: str | None = None
+            messages = None
+            if agent_mode:
+                # agent 模式：构造 LangChain messages（记忆/历史/摘要注入，
+                # 跳过 RAG 预检索，检索决策交给 search_knowledge 工具）
+                try:
+                    toolkit = AgentToolkit(
+                        self.vector_recall, self.lexical_recall,
+                        self.query_rewriter, self.chunker, self.reranker,
+                    )
+                    tools = toolkit.get_tools()
+                    tool_map = {t.name: t for t in tools}
+                    tools_desc = "\n".join(f"- {t.name}: {t.description}" for t in tools)
+                    messages, ctx_warns, refs = (
+                        await self.context_builder.build_agent_messages(
+                            cid, message, self._context_warning,
+                            self._build_agent_system_prompt(tools_desc),
+                        )
+                    )
+                except Exception:
+                    self._log_failure(
+                        cid, turn_id, "context", "prompt_context", "CONTEXT_FAILED"
+                    )
+                    yield ChatFailed(
+                        conversation_id=cid, turn_id=turn_id, sequence=nxt(), phase="context",
+                        error=ErrorInfo(code="CONTEXT_FAILED", message="上下文构建失败", retryable=True),
+                        partial_output_persisted=False,
+                    )
+                    terminal_emitted = True
+                    return
+            else:
+                prompt, ctx_warns, refs = await self._build_context(cid, message)
+                if prompt is None:
+                    self._log_failure(
+                        cid, turn_id, "context", "prompt_context", "CONTEXT_FAILED"
+                    )
+                    yield ChatFailed(
+                        conversation_id=cid, turn_id=turn_id, sequence=nxt(), phase="context",
+                        error=ErrorInfo(code="CONTEXT_FAILED", message="上下文构建失败", retryable=True),
+                        partial_output_persisted=False,
+                    )
+                    terminal_emitted = True
+                    return
             for comp, code, msg in ctx_warns:
                 yield ContextWarning(
                     conversation_id=cid, turn_id=turn_id, sequence=nxt(),
@@ -288,28 +323,41 @@ class TurnCoordinator:
                 memory_refs=[MemoryRef(**r) for r in refs["memory_refs"]],
             )
 
-            # ---- model stream ----
+            # ---- model generation ----
+            # agent：ReAct 工具循环（模型自主决策）；rag：单次 astream
             text = ""
             model_stream = None
             try:
-                model_stream = self.chat_model.astream(prompt)
-                async for chunk in model_stream:
-                    # C6: reasoning_content 与 content 在不同 chunk，分别分流
-                    reasoning = (
-                        chunk.additional_kwargs.get("reasoning_content")
-                        if hasattr(chunk, "additional_kwargs")
-                        else None
+                if agent_mode:
+                    bound = self.chat_model.bind_tools(
+                        list(tool_map.values()), tool_choice="auto",
+                        extra_body={"thinking": {"type": "enabled"}},
                     )
-                    if reasoning:
-                        yield ReasoningDelta(
-                            conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=reasoning
+                    state = ReactLoopState()
+                    async for ev in react_loop(
+                        bound, messages, tool_map, cid, turn_id, nxt, state
+                    ):
+                        yield ev
+                    text = state.text
+                else:
+                    model_stream = self.chat_model.astream(prompt)
+                    async for chunk in model_stream:
+                        # C6: reasoning_content 与 content 在不同 chunk，分别分流
+                        reasoning = (
+                            chunk.additional_kwargs.get("reasoning_content")
+                            if hasattr(chunk, "additional_kwargs")
+                            else None
                         )
-                    delta = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if delta:
-                        text += delta
-                        yield TokenDelta(
-                            conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=delta
-                        )
+                        if reasoning:
+                            yield ReasoningDelta(
+                                conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=reasoning
+                            )
+                        delta = chunk.content if hasattr(chunk, "content") else str(chunk)
+                        if delta:
+                            text += delta
+                            yield TokenDelta(
+                                conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=delta
+                            )
             except asyncio.CancelledError:
                 raise  # 客户端断开：丢弃 partial、保留 USER、不伪造终态
             except Exception:
@@ -324,25 +372,22 @@ class TurnCoordinator:
                 terminal_emitted = True
                 return
             finally:
-                # async-for 不保证在外层 generator 被 aclose() 时关闭内层迭代器。
-                # 显式 aclose 才能把 Abort 传播到 ChatOpenAI.astream()。
-                close_model_stream = (
-                    getattr(model_stream, "aclose", None)
-                    if model_stream is not None
-                    else None
-                )
-                if close_model_stream is not None:
-                    try:
-                        await close_model_stream()
-                    except Exception:
-                        # 关闭失败不能覆盖既有业务终态或阻止 guard 的 finally；
-                        # 只记录稳定标识，不记录 Prompt、partial 或异常正文。
-                        logger.warning(
-                            "model stream close failed code=model_stream_close_failed "
-                            "conversation_id=%s turn_id=%s",
-                            cid,
-                            turn_id,
-                        )
+                # agent 模式的 astream 由 react_loop 内部管理（每轮自开自关）；
+                # 仅 rag 模式的 model_stream 需显式 aclose 把 Abort 传播到上游。
+                if model_stream is not None:
+                    close_model_stream = getattr(model_stream, "aclose", None)
+                    if close_model_stream is not None:
+                        try:
+                            await close_model_stream()
+                        except Exception:
+                            # 关闭失败不能覆盖既有业务终态或阻止 guard 的 finally；
+                            # 只记录稳定标识，不记录 Prompt、partial 或异常正文。
+                            logger.warning(
+                                "model stream close failed code=model_stream_close_failed "
+                                "conversation_id=%s turn_id=%s",
+                                cid,
+                                turn_id,
+                            )
 
             # ---- Transaction B: persist ASSISTANT + commit ----
             assistant_id = await self._txn_assistant(cid, text)
@@ -470,6 +515,24 @@ class TurnCoordinator:
     async def _build_context(self, cid, message):
         """Delegate to ContextBuilder. @deprecated: use self.context_builder.build()"""
         return await self.context_builder.build(cid, message, self._context_warning)
+
+    @staticmethod
+    def _build_agent_system_prompt(tools_desc: str) -> str:
+        """Agent 模式 system prompt（ADR-0016）。硬编码而非 DB 模板：工具描述天然来自
+        @tool docstring，与代码同步；稳定后可迁移 PromptTemplate。"""
+        return (
+            "你是 CodeAware Agent，一个能自主调用工具来回答问题的智能助手。\n"
+            "你的知识库包含团队的技术文档，回答问题时优先检索知识库，确保答案有依据。\n\n"
+            "## 可用工具\n"
+            f"{tools_desc}\n\n"
+            "## 行为规则\n"
+            "1. 需要知识库内容时，调用 search_knowledge 检索；只看片段不够时，用 get_document 看全文。\n"
+            "2. 需要精确计算或当前时间时，调用对应工具，不要凭记忆口算或臆测时间。\n"
+            "3. 一次可并行调用多个独立工具。\n"
+            "4. 工具结果不足时，可换更具体的关键词再次检索；不要重复相同调用。\n"
+            "5. 信息足够后，停止调用工具，给出最终回答，并注明依据的知识文档。\n"
+            "6. 若检索不到相关内容，诚实说明知识库中没有该信息，不要编造。"
+        )
 
     async def _post_turn_summary(self, cid, warnings):
         """Delegate to PostTurnProcessor. @deprecated: use self.post_turn_processor.run_summary()"""
