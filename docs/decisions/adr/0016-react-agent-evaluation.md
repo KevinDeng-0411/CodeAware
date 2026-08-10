@@ -1,6 +1,6 @@
 # ADR-0016: ReAct Agent 升级评估--thinking 模式 tool calling 原型验证
 
-**状态**: 已验证（评估完成，决策：当前不实施完整 ReAct，生产化路径已验证可行）
+**状态**: 已实施（2026-08-10 追加：agent 模式落地，CHAT_MODE=rag|agent）
 **日期**: 2026-08-10
 **决策者**: Kevin
 
@@ -36,6 +36,21 @@
 | H3 工具闭环（选工具->执行->终答） | ✅ | 模型正确选用工具、基于 ToolMessage 观察结果生成最终答案 |
 
 **关键发现**：reasoning_content 回传比预期简单--`AIMessage(content=..., tool_calls=..., additional_kwargs={"reasoning_content": reasoning})` 直接工作，无需手工拼装 OpenAI message 格式。thinking 模式 + `bind_tools(tool_choice="auto", extra_body={"thinking":{"type":"enabled"}})` 即可。
+
+## 实施结果（2026-08-10）
+
+用户明确要求实施 agent 模式线，重启条件 1 触发（真实的多步推理场景需求）。**决策从"暂缓"转为"双模式落地"**：RAG 模式保持默认且零改动，Agent 模式作为 CHAT_MODE=agent 分支新增。
+
+| 实施项 | 内容 |
+|---|---|
+| 开关 | `config.py` + `chat_mode`（rag\|agent，默认 rag，.env.example + CHAT_MODE） |
+| 工具集 | `app/ai/agent/tools.py`：search_knowledge（套壳 RagService 保 MRR 0.941 流水线）/ get_document（全文截断）/ list_documents / calculate / get_current_time |
+| ReAct 循环 | `app/ai/agent/react_loop.py`：thinking reasoning_content 逐轮回注、流式 tool_calls 聚合、防打转去重、步数上限、工具失败降级 |
+| 分流 | `turn_coordinator.py` run() 按 chat_mode 分流；agent 走 build_agent_messages（跳过 RAG 预检索，检索决策交给工具）+ react_loop，rag 走原单次 astream（零改动） |
+| SSE | chat_events.py + ToolCall/ToolResult 事件（protocol_version 保持 1）；前端 chatEvents.ts/sseParser.ts/Chat.tsx 同步，ToolTrace 折叠面板渲染工具轨迹 |
+| 验证 | 后端 329 passed（+14 agent 测试）；前端 43 passed + lint + build；live smoke 真实 DeepSeek：calculate / get_current_time / search_knowledge+get_document 链式调用全部工作 |
+
+**与暂缓决策的关系**：暂缓的是"用完整 ReAct 替代 RAG"（动已验证设计、ROI 低）；实际落地的是"双模式并存"（RAG 处理 90% 单轮问题，Agent 预留 10% 多步推理），与 [ADR-0009](0009-reranker-deferred.md) "评估后暂缓、条件满足后落地"同模式。
 
 ## 决策：当前不实施完整 ReAct
 

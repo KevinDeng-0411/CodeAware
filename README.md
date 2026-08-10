@@ -27,9 +27,10 @@ The current core deliverable is a **Chat/RAG knowledge-base Q&A app**: upload te
 | Feature | Description |
 |---|---|
 | 📄 **Knowledge-base Q&A** | Upload MD/DOCX/HTML/PDF → element-aware parsing → chunking & embedding → hybrid retrieval (BM25 + vector RRF) → answers **with cited sources** |
-| 🧠 **Streamed chain-of-thought** | DeepSeek `reasoning_content` streamed separately from the answer (8-event typed SSE) — the model's reasoning is visible |
+| 🧠 **Streamed chain-of-thought** | DeepSeek `reasoning_content` streamed separately from the answer (10-event typed SSE) — the model's reasoning is visible |
 | 🇨🇳 **Chinese retrieval optimization** | jieba segmentation makes Chinese BM25 usable (exact Chinese R@5: 0.25 → **1.000**) |
 | 🔀 **Smart routing + self-correction** | LangGraph orchestration: common-sense questions skip retrieval (saves latency); weak retrieval triggers query rewriting & retry (ADR-0015) |
+| 🤖 **Agent mode** | `CHAT_MODE=agent` enables ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning with visible tool trace (ADR-0016) |
 | 👥 **Team-ready** | JWT auth, per-user conversation isolation, shared knowledge base & memory (lab scenario) |
 | 📚 **Document management** | List / detail (chunk visualization) / soft delete / replace-update (ADR-0013) |
 | 🧩 **Long-term memory** | Facts auto-extracted from conversations + pgvector recall — team context persists across sessions |
@@ -124,7 +125,7 @@ docker compose down                    # stop everything (data persists in volum
 graph TB
     subgraph Presentation["Presentation Layer"]
         React["React 19 + Vite<br/>8-module SPA"]
-        SSE["Typed SSE Parser<br/>8 events, protocol v1"]
+        SSE["Typed SSE Parser<br/>10 events, protocol v1"]
     end
 
     subgraph Application["Application Layer (FastAPI)"]
@@ -155,7 +156,7 @@ graph TB
         DS["DeepSeek v4-flash"]
     end
 
-    React -->|"typed SSE (8 events)"| Router
+    React -->|"typed SSE (10 events)"| Router
     Router --> Auth
     Auth --> TC
     TC --> Context
@@ -252,7 +253,7 @@ flowchart LR
 - **Rerank is a reversible enhancement** — `reranker_enabled=False` reverts to pure RRF
 
 Detailed design (Chat full-chain sequence, 9-table ER, RAG pipeline): see [docs/roadmap/current-release/README.md](docs/roadmap/current-release/README.md).
-## Typed SSE Example (8-event protocol)
+## Typed SSE Example (10-event protocol)
 
 For a new conversation, `conversation_id` is created by the server and returned in `chat.started`:
 
@@ -372,7 +373,7 @@ Running bare `pytest` is forbidden for the backend — a safe runner creates dis
 |---|---|
 | JWT auth + per-user conversation isolation | project management (X-Project-ID) |
 | shared knowledge base & memory | per-user KB permissions |
-| 8-event typed SSE | WebSocket |
+| 10-event typed SSE | WebSocket |
 | BM25 + pgvector RRF **coarse rank** + ONNX cross-encoder **re-rank** | LLM-as-reranker / torch CrossEncoder |
 | element-aware chunking + scanned-PDF rejection | OCR |
 | PDF tables flattened into plain text (no row/column structure) | pdfplumber `extract_tables()` → Markdown table serialization (deferred until table-heavy docs exist) |

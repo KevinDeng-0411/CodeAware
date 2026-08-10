@@ -27,7 +27,7 @@ AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代�
 | 能力 | 说明 |
 |---|---|
 | 📄 **知识库问答** | 上传 MD/DOCX/HTML/PDF → 元素感知解析 → 分块嵌入 → 混合检索（BM25 + 向量 RRF）→ 回答**带引用来源** |
-| 🧠 **思考过程流式** | DeepSeek reasoning_content 与回答分离推送（8 事件 typed SSE），可见"模型如何推理" |
+| 🧠 **思考过程流式** | DeepSeek reasoning_content 与回答分离推送（10 事件 typed SSE），可见"模型如何推理" |
 | 🇨🇳 **中文检索优化** | jieba 分词让中文 BM25 从不可用变可用（中文精确 R@5: 0.25 → **1.000**） |
 | 🔀 **智能路由 + 自我纠错** | LangGraph 编排：常识问题跳过检索（省延迟）；检索不理想自动改写重试（ADR-0015） |
 | 👥 **团队化** | JWT 登录、会话按用户隔离、知识库/记忆全员共享（实验室场景） |
@@ -124,7 +124,7 @@ docker compose down                    # 全停（数据在 volume 中保留）
 graph TB
     subgraph Presentation["展现层"]
         React["React 19 + Vite<br/>8 模块 SPA"]
-        SSE["Typed SSE 解析<br/>8 事件, 协议 v1"]
+        SSE["Typed SSE 解析<br/>10 事件, 协议 v1"]
     end
 
     subgraph Application["应用层 (FastAPI)"]
@@ -155,7 +155,7 @@ graph TB
         DS["DeepSeek v4-flash"]
     end
 
-    React -->|"typed SSE (8 事件)"| Router
+    React -->|"typed SSE (10 事件)"| Router
     Router --> Auth
     Auth --> TC
     TC --> Context
@@ -247,12 +247,12 @@ flowchart LR
 
 - **PG 是真相源，Redis 只做可丢弃缓存**——Redis 挂掉自动回查 PG，功能不降级
 - **模型等待期间不持有数据库事务**——连接池不被长时间占用
-- **typed SSE 显式语义**——8 种事件带版本号和严格递增序号，同步接口 drain 同一事件流，状态机只有一份
+- **typed SSE 显式语义**——10 种事件带版本号和严格递增序号，同步接口 drain 同一事件流，状态机只有一份
 - **双运行时可回退**——LangGraph 检索增强（`RAG_RUNTIME=graph`）异常可一键回退原路径（`service`）
 - **Rerank 是可回退增强**——`reranker_enabled=False` 一键回退纯 RRF
 
 详细设计：Chat 全链路时序、数据模型（9 表 ER）、RAG 流水线见 [docs/roadmap/current-release/README.md](docs/roadmap/current-release/README.md)。
-## typed SSE 示例（8 事件协议）
+## typed SSE 示例（10 事件协议）
 
 新会话的 `conversation_id` 由服务端创建并在 `chat.started` 中返回：
 
@@ -370,7 +370,7 @@ data: {"protocol_version":1,...,"sequence":N}
 |---|---|
 | JWT 认证 + 会话按用户隔离 | 项目管理（X-Project-ID） |
 | 知识库/记忆全员共享 | 知识库按人权限 |
-| 8 事件 typed SSE | WebSocket |
+| 10 事件 typed SSE | WebSocket |
 | BM25 + pgvector RRF **粗排** + ONNX cross-encoder **精排** | LLM-as-reranker / torch CrossEncoder |
 | 元素感知分块 + 扫描 PDF 拒绝 | OCR |
 | PDF 表格压平为纯文本流（无行列结构） | pdfplumber `extract_tables()` → Markdown 表格序列化（待表格密集型文档后引入） |
