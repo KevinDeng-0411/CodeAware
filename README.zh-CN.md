@@ -314,7 +314,7 @@ data: {"protocol_version":1,...,"sequence":N}
 | 前端测试 | **43 passed** |
 | API 端点 | 32 个 |
 | 数据表 | 9 张 |
-| ADR | 15 篇 (0001-0015) |
+| ADR | 16 篇 (0001-0016) |
 | Alembic head | 0011 |
 | 完成阶段 | C1-C6 + 团队化 A/B/C + 文档管理 + 异步任务队列 + Kafka 事件流 |
 
@@ -410,7 +410,7 @@ data: {"protocol_version":1,...,"sequence":N}
 | [docs/roadmap/部署上线指南.md](docs/roadmap/部署上线指南.md) | 部署 (局域网 + 云) |
 | [docs/roadmap/chat-to-agent/personal/README.md](docs/roadmap/chat-to-agent/personal/README.md) | Agent 路线（锁定） |
 | [docs/optimization/](docs/optimization/README.md) | 检索优化评估（jieba/top_k/LangGraph/RAGAS） |
-| [docs/decisions/adr/](docs/decisions/adr/) | 15 篇架构决策 |
+| [docs/decisions/adr/](docs/decisions/adr/) | 16 篇架构决策 |
 | [docs/interview/面试准备指南.md](docs/interview/面试准备指南.md) | 面试深挖 |
 | [docs/interview/面试速通版.md](docs/interview/面试速通版.md) | 面试速通 |
 | [docs/interview/项目简历介绍.md](docs/interview/项目简历介绍.md) | 简历粘贴 |

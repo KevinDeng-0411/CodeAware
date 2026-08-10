@@ -316,7 +316,7 @@ data: {"protocol_version":1,...,"sequence":N}
 | Frontend tests | **43 passed** |
 | API endpoints | 32 |
 | Tables | 9 |
-| ADRs | 15 (0001-0015) |
+| ADRs | 16 (0001-0016) |
 | Alembic head | 0011 |
 | Delivered | C1-C6 + team A/B/C + document management + async task queue + Kafka event streaming |
 

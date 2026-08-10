@@ -105,3 +105,4 @@
 | [0013](decisions/adr/0013-document-management-soft-delete.md) | 文档管理：软删行 + 物理删分块 + 列表 + replace 更新 |
 | [0014](decisions/adr/0014-langchain-thin-adapter-no-langgraph.md) | LangChain 薄 adapter：仅 config.py 一处 import，完整 Agent 不引入 |
 | [0015](decisions/adr/0015-langgraph-retrieval-enhancement.md) | LangGraph 检索增强：智能路由 + 自我纠错（路由准确率 60/60，决策变更见 ADR-0014） |
+| [0016](decisions/adr/0016-react-agent-evaluation.md) | ReAct Agent 升级评估：thinking tool calling 原型验证通过，当前不实施完整 ReAct（留重启条件） |
