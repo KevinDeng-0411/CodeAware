@@ -1,7 +1,7 @@
 // Agent Runs - 回放/评审页（ADR-0017 LLMOps 闭环）
 // 列表 + 统计条 + 详情回放（时间线 / 流程视图）+ 失败沉淀评审 + 三处跳转
 // （doc → Knowledge、对话 → Chat、记忆 → Memory）。
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -161,43 +161,45 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
   const [category, setCategory] = useState("");
   const [reviewBusy, setReviewBusy] = useState(false);
 
-  const loadStats = useCallback(async () => {
+  // 普通函数（不用 useCallback）：useToast 每次渲染返回新对象，放依赖会无限重跑
+  //（Memory.tsx 同款坑）。effect 只依赖稳定/离散状态触发；convFilter 由 Enter/刷新显式应用。
+  const loadStats = async () => {
     try {
       setStats(await agentRuns.stats());
     } catch (e) {
       toast.show(e);
     }
-  }, [toast]);
+  };
 
-  const loadList = useCallback(
-    async (p: number) => {
-      setLoading(true);
-      try {
-        const data = await agentRuns.list({
-          page: p,
-          size,
-          needs_review: needsReview ?? undefined,
-          review_status: reviewStatus === "ALL" ? undefined : reviewStatus,
-          conversation_id: convFilter.trim() || undefined,
-        });
-        setRecords(data.records);
-        setTotal(data.total);
-        setPage(data.page);
-      } catch (e) {
-        toast.show(e);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [needsReview, reviewStatus, convFilter, size, toast],
-  );
+  const loadList = async (p: number) => {
+    setLoading(true);
+    try {
+      const data = await agentRuns.list({
+        page: p,
+        size,
+        needs_review: needsReview ?? undefined,
+        review_status: reviewStatus === "ALL" ? undefined : reviewStatus,
+        conversation_id: convFilter.trim() || undefined,
+      });
+      setRecords(data.records);
+      setTotal(data.total);
+      setPage(data.page);
+    } catch (e) {
+      toast.show(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     void loadStats();
-  }, [loadStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 离散筛选（待评审 / 评审状态）变化时自动刷新第一页
   useEffect(() => {
     void loadList(1);
-  }, [loadList]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsReview, reviewStatus]);
 
   const openDetail = async (turnId: string) => {
     setLoadingDetail(true);
@@ -305,7 +307,10 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
         <input
           value={convFilter}
           onChange={(e) => setConvFilter(e.target.value)}
-          placeholder="conversation_id"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void loadList(1);
+          }}
+          placeholder="conversation_id（Enter 应用）"
           className="px-2 py-1 text-xs font-mono rounded border border-line bg-panel text-ink placeholder:text-mute/50"
         />
         <button

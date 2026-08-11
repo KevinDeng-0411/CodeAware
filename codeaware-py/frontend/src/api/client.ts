@@ -114,7 +114,7 @@ export const aiReadme = {
 
 // ---------- Chat ----------
 export const chat = {
-  send: (p: { conversation_id?: string; message: string }) =>
+  send: (p: { conversation_id?: string; message: string; mode?: "rag" | "agent" }) =>
     call<ChatResponseVO>("/api/chat/send", { method: "POST", body: JSON.stringify(p) }),
   conversations: () => call<ConversationItem[]>("/api/chat/conversations"),
   messages: (cid: string) => call<ChatMessage[]>(`/api/chat/conversations/${cid}`),
@@ -127,7 +127,7 @@ export const chat = {
  * chat.started 立即拿到 conversation_id；chat.completed 才完成。
  */
 export async function chatStream(
-  p: { conversation_id?: string; message: string },
+  p: { conversation_id?: string; message: string; mode?: "rag" | "agent" },
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
 ): Promise<ChatStreamOutcome> {

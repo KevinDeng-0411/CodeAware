@@ -114,7 +114,7 @@ class _MetricCoordinator:
         self._started: dict[str, float] = {}
 
     async def prepare_turn(
-        self, conversation_id: str | None, _message: str, user_id: int | None = None
+        self, conversation_id: str | None, _message: str, user_id: int | None = None, mode: str | None = None
     ) -> PreparedTurn:
         cid = conversation_id or f"c3-metric-{uuid.uuid4().hex}"
         self._started[cid] = time.perf_counter()

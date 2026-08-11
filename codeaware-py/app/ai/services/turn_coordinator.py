@@ -117,6 +117,7 @@ class PreparedTurn:
     conversation_id: str
     created: bool
     warnings: list[dict] = field(default_factory=list)
+    mode: str | None = None  # 前端切换 rag|agent；None = 用 settings.chat_mode
 
 
 class TurnCoordinator:
@@ -248,7 +249,8 @@ class TurnCoordinator:
             self._release(cid)
 
     async def prepare_turn(
-        self, conversation_id: str | None, message: str, user_id: int | None = None
+        self, conversation_id: str | None, message: str, user_id: int | None = None,
+        mode: str | None = None,
     ) -> PreparedTurn:
         """响应创建前完成 existence preflight、guard 与 Transaction A。
 
@@ -305,7 +307,7 @@ class TurnCoordinator:
                 cid,
             )
             raise ChatTurnStartFailed from exc
-        return PreparedTurn(conversation_id=cid, created=created, warnings=warnings)
+        return PreparedTurn(conversation_id=cid, created=created, warnings=warnings, mode=mode)
 
     async def run(self, prepared: PreparedTurn, message: str):
         """产出 typed 事件；Transaction A 已由 prepare_turn 在响应创建前提交。"""
@@ -336,7 +338,8 @@ class TurnCoordinator:
 
             # ---- build context (exclude current USER) ----
             # CHAT_MODE（ADR-0016）：rag=确定性状态机 / agent=ReAct 工具循环
-            agent_mode = settings.chat_mode == "agent"
+            # 前端可通过 ChatRequest.mode 按请求覆盖 settings.chat_mode
+            agent_mode = (prepared.mode or settings.chat_mode) == "agent"
             prompt: str | None = None
             messages = None
             context_snapshot: dict | None = None  # agent 模式：本轮上下文快照（ADR-0017）

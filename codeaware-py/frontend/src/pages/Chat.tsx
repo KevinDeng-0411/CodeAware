@@ -31,6 +31,8 @@ export default function ChatPage() {
   const [activeCid, setActiveCid] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  // ADR-0016：RAG/Agent 模式切换（按请求传 mode，覆盖后端 CHAT_MODE）
+  const [chatMode, setChatMode] = useState<"rag" | "agent">("rag");
   const [streaming, setStreaming] = useState(false);
   const [loadingConv, setLoadingConv] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -176,7 +178,7 @@ export default function ChatPage() {
 
     try {
       const outcome = await chatStream(
-        { conversation_id: turn.conversationId ?? undefined, message: text },
+        { conversation_id: turn.conversationId ?? undefined, message: text, mode: chatMode },
         {
           onStarted: (e) => {
             if (!turnController.rememberConversation(turn, e.conversation_id)) return;
@@ -384,6 +386,24 @@ export default function ChatPage() {
 
         {/* 输入器 */}
         <div className="px-5 py-3 border-t border-line bg-panel">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 mb-2">
+            <span className="font-mono text-2xs text-mute tracking-techy">模式</span>
+            {(["rag", "agent"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setChatMode(m)}
+                title={m === "rag" ? "RAG：确定性检索问答" : "Agent：ReAct 工具循环"}
+                className={`px-2 py-0.5 text-2xs font-mono rounded border transition-colors ${
+                  chatMode === m
+                    ? "border-oxblood text-oxblood bg-oxblood/5"
+                    : "border-line text-mute hover:text-ink"
+                }`}
+              >
+                {m === "rag" ? "RAG" : "Agent"}
+              </button>
+            ))}
+          </div>
           <div className="max-w-3xl mx-auto flex items-end gap-2">
             <textarea
               value={input}

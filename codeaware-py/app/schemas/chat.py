@@ -1,5 +1,7 @@
 """Chat schemas - 请求/响应。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.ai.agent.guardrails import detect_query_injection
@@ -9,7 +11,9 @@ from app.schemas.chat_events import Component
 
 class ChatRequest(BaseModel):
     conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
-    message: str = Field(min_length=1, max_length=20_000)
+    message: str = Field(default=..., min_length=1, max_length=20_000)
+    # 前端 RAG/Agent 切换（ADR-0016）：按请求覆盖 settings.chat_mode；缺省用后端配置
+    mode: Literal["rag", "agent"] | None = Field(default=None)
 
     @field_validator("conversation_id")
     @classmethod

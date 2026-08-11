@@ -222,9 +222,9 @@ class _EndpointCoordinator:
     def __init__(self) -> None:
         self.calls: list[tuple] = []
 
-    async def prepare_turn(self, cid, message, user_id=None):
-        self.calls.append(("prepare_turn", cid, message))
-        return PreparedTurn(conversation_id=cid or "new-cid", created=cid is None)
+    async def prepare_turn(self, cid, message, user_id=None, mode=None):
+        self.calls.append(("prepare_turn", cid, message, mode))
+        return PreparedTurn(conversation_id=cid or "new-cid", created=cid is None, mode=mode)
 
     async def run_sync(self, prepared, message):
         self.calls.append(("run_sync", prepared.conversation_id, message))
@@ -246,7 +246,7 @@ class _RejectingEndpointCoordinator:
     def __init__(self, error) -> None:
         self.error = error
 
-    async def prepare_turn(self, _cid, _message, user_id=None):
+    async def prepare_turn(self, _cid, _message, user_id=None, mode=None):
         raise self.error
 
 
@@ -377,7 +377,7 @@ async def test_sync_and_stream_endpoints_share_prepare_path():
     sync_result = await send(req, coordinator=sync_coord, user=None)
     assert sync_result.data.conversation_id == "shared-cid"
     assert sync_coord.calls == [
-        ("prepare_turn", "shared-cid", "same path"),
+        ("prepare_turn", "shared-cid", "same path", None),
         ("run_sync", "shared-cid", "same path"),
     ]
 
@@ -385,7 +385,7 @@ async def test_sync_and_stream_endpoints_share_prepare_path():
     stream_result = await send_stream(req, coordinator=stream_coord, user=None)
     assert isinstance(stream_result, _ClosingStreamingResponse)
     assert stream_coord.calls == [
-        ("prepare_turn", "shared-cid", "same path"),
+        ("prepare_turn", "shared-cid", "same path", None),
         ("run", "shared-cid", "same path"),
     ]
 

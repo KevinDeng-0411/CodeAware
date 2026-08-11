@@ -18,6 +18,7 @@ from app.ai.services.turn_coordinator import (
     TurnCoordinator,
 )
 from app.api.v1.deps import get_chat_service, get_current_user, get_db, get_turn_coordinator
+from app.core.config import settings
 from app.core.response import Result
 from app.db.redis import redis_client
 from app.models import AgentRun, Conversation, Message, User
@@ -42,9 +43,9 @@ logger = logging.getLogger(__name__)
 _ANSWER_CACHE_TTL = 300  # 5 分钟
 
 
-def _answer_cache_key(message: str) -> str:
-    """精准匹配缓存 key：MD5(strip(message))。"""
-    return f"answer:{hashlib.md5(message.strip().encode()).hexdigest()}"
+def _answer_cache_key(message: str, mode: str = "rag") -> str:
+    """精准匹配缓存 key：MD5(strip(message)) + mode（rag/agent 答案不互串）。"""
+    return f"answer:{mode}:{hashlib.md5(message.strip().encode()).hexdigest()}"
 
 # 事件类 -> SSE event 名
 _EVENT_NAME = {cls: name for name, cls in EVENT_TYPES.items()}
@@ -196,7 +197,7 @@ async def send(req: ChatRequest, coordinator: TurnCoordinator = Depends(get_turn
     """
     uid = user.id if isinstance(user, User) else None
     try:
-        prepared = await coordinator.prepare_turn(req.conversation_id, req.message, user_id=uid)
+        prepared = await coordinator.prepare_turn(req.conversation_id, req.message, user_id=uid, mode=req.mode)
     except ChatConversationNotFound:
         return _error(404, "CHAT_CONVERSATION_NOT_FOUND")
     except ChatTurnInProgress:
@@ -204,8 +205,8 @@ async def send(req: ChatRequest, coordinator: TurnCoordinator = Depends(get_turn
     except ChatTurnStartFailed:
         return _error(500, "CHAT_START_FAILED")
 
-    # 答案缓存：精准匹配，命中则跳过生成
-    cache_key = _answer_cache_key(req.message)
+    # 答案缓存：精准匹配（含有效 mode，rag/agent 不互串），缺省用后端配置
+    cache_key = _answer_cache_key(req.message, req.mode or settings.chat_mode)
     try:
         cached = await redis_client.get(cache_key)
     except Exception:
@@ -249,7 +250,7 @@ async def send_stream(req: ChatRequest, coordinator: TurnCoordinator = Depends(g
     """流式对话：typed SSE。user 经 DI 解析；直连调用时跳过归属校验。"""
     uid = user.id if isinstance(user, User) else None
     try:
-        prepared = await coordinator.prepare_turn(req.conversation_id, req.message, user_id=uid)
+        prepared = await coordinator.prepare_turn(req.conversation_id, req.message, user_id=uid, mode=req.mode)
     except ChatConversationNotFound:
         return _error(404, "CHAT_CONVERSATION_NOT_FOUND")
     except ChatTurnInProgress:
