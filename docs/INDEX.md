@@ -8,7 +8,8 @@
 1. 要编码某功能 -> 在下表查「功能」行 -> 读对应 ADR 与当前执行卡。
 2. ADR 负责长期语义；`current-release/` 负责 C1–C3 当前版本与 C4 BM25 增强实施；
    `migration/` 只作迁移历史与背景。
-3. 当前已交付 C1–C6 + 检索优化 + **Agent 模式（CHAT_MODE=rag|agent，ADR-0016）**；阶段状态由
+3. 当前已交付 C1–C6 + 检索优化 + **Agent 模式（CHAT_MODE=rag|agent，ADR-0016）** +
+   **LLMOps 闭环（ADR-0017：run trace / 失败沉淀 / guardrail / memory 观测）**；阶段状态由
    [机器可校验证据](roadmap/证据清单与解锁规则.md) 管理。
 4. **chat-to-agent 规划已翻篇**：不再是硬门禁/严格遵循，仅作后续方向参考
    （多 Agent / checkpoint / 外部动作工具）。Agent 模式当前为检索层决策形态。
@@ -28,7 +29,7 @@
 | Agent Tool / Citation / SSE 事件 | - | - | [精简 S4](roadmap/chat-to-agent/personal/S4-只读工具Agent.md) · [公共契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
 | Agent Run / Artifact / Approval（条件型） | - | - | [可选升级触发条件](roadmap/chat-to-agent/personal/可选升级触发条件.md) · [平台参考契约](roadmap/chat-to-agent/00-执行约定与公共契约.md) |
 | 阶段闭环 / 演示 / 验收证据 | - | - | [统一规则](roadmap/证据清单与解锁规则.md) · [当前模板](roadmap/current-release/验收证据模板.md) · [Agent 模板](roadmap/chat-to-agent/验收证据模板.md) |
-| 数据模型（9 表） | 0001 / 0002 / 0004 / 0005 / 0006 | §7.2.2 | - |
+| 数据模型（10 表） | 0001 / 0002 / 0004 / 0005 / 0006 / 0017 | §7.2.2 | - |
 | 向量召回基建 VectorRecallService | [0001](decisions/adr/0001-memory-vs-knowledge-two-tables-shared-recall.md) | §7.3 | - |
 | 短期记忆（滑窗+摘要+PG fallback） | [0003](decisions/adr/0003-message-store-pg-source-of-truth.md) · [0004](decisions/adr/0004-memory-concept-and-conversation-naming.md) | §7.6 | - |
 | 长期记忆（内联向量召回） | [0001](decisions/adr/0001-memory-vs-knowledge-two-tables-shared-recall.md) · [0004](decisions/adr/0004-memory-concept-and-conversation-naming.md) | §7.7 | - |
@@ -80,7 +81,7 @@
 | [migration/Python重构迁移文档.md](migration/Python重构迁移文档.md) | Java → Python 历史迁移记录（含 ADR 索引；不再直接下发任务） |
 | [migration/testing-notes.md](migration/testing-notes.md) | 测试与集成踩坑留痕（langchain 导入 hang / test_migration 性能 / 异步客户端 loop） |
 | [migration/后续升级计划.md](migration/后续升级计划.md) | 历史缺口和旧 U1–U5 预留，仅作背景；实施以 current-release 与个人路线为准 |
-| [decisions/adr/](decisions/adr/) | 16 份架构决策记录 0001~0016 |
+| [decisions/adr/](decisions/adr/) | 17 份架构决策记录 0001~0017 |
 | [decisions/glossary.md](decisions/glossary.md) | 领域术语表（10 术语全 settled） |
 | [integration/deepseek-notes.md](integration/deepseek-notes.md) | DeepSeek thinking/非思考模式集成约定 |
 | [interview/面试准备指南.md](interview/面试准备指南.md) | 面试讲解与追问话术 |
@@ -105,3 +106,4 @@
 | [0014](decisions/adr/0014-langchain-thin-adapter-no-langgraph.md) | LangChain 薄 adapter：仅 config.py 一处 import，完整 Agent 不引入 |
 | [0015](decisions/adr/0015-langgraph-retrieval-enhancement.md) | LangGraph 检索增强：智能路由 + 自我纠错（路由准确率 60/60，决策变更见 ADR-0014） |
 | [0016](decisions/adr/0016-react-agent-evaluation.md) | ReAct Agent 模式：先评估暂缓 → 实施 CHAT_MODE=agent 双模式（5 工具 + ReAct 循环 + 停止判断优化） |
+| [0017](decisions/adr/0017-agent-llmops-closed-loop.md) | Agent LLMOps 闭环：run trace + 失败沉淀入 eval + 请求边界 guardrail + memory 观测 + 前端 Agent Runs 页 |

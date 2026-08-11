@@ -11,6 +11,8 @@ import type {
 import type { ChatMessage, ConversationItem } from "../api/types";
 import { Button, EmptyState, SignalTrace, ToastBar, useToast } from "../components/ui";
 import Markdown from "../components/Markdown";
+import ToolTrace, { type ToolActivity } from "../components/ToolTrace";
+import { useAgentOps } from "../store/agentOps";
 import {
   cancelledTurnMessages,
   ChatTurnController,
@@ -18,15 +20,6 @@ import {
   readCancelledTurnTruth,
   type ChatTurn,
 } from "./chatTurnController";
-
-// ADR-0016: Agent 模式工具调用过程（tool.call -> tool.result 配对）
-interface ToolActivity {
-  callId: string;
-  name: string;
-  args: Record<string, unknown>;
-  status: "ok" | "error" | "running";
-  result?: string;
-}
 
 const CANCELLED_STATUS = "生成已取消";
 const INTERRUPTED_STATUS = "生成中断，已从服务器恢复消息";
@@ -102,6 +95,17 @@ export default function ChatPage() {
       setLoadingConv(false);
     }
   };
+
+  // ADR-0017：从 Agent Runs"查看对话"跳转进来时自动打开目标会话
+  const focusCid = useAgentOps((s) => s.conversationFocusId);
+  const clearConversationFocus = useAgentOps((s) => s.clearConversationFocus);
+  useEffect(() => {
+    if (focusCid) {
+      void selectConv(focusCid);
+      clearConversationFocus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCid]);
 
   const deleteConv = async (cid: string) => {
     try {
@@ -472,45 +476,6 @@ function MessageBubble({
         {showRefs && <SourceCards refs={refs!} />}
         {showTools && <ToolTrace tools={tools!} />}
       </div>
-    </div>
-  );
-}
-
-// ADR-0016: 工具调用过程折叠面板（Agent 模式 tool.call/tool.result 轨迹）
-function ToolTrace({ tools }: { tools: ToolActivity[] }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="mt-2 rounded border border-line bg-graph/40">
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-1.5 font-mono text-2xs uppercase tracking-techy text-mute"
-      >
-        <span>工具调用 · {tools.length} 次{!expanded ? " · 已折叠" : ""}</span>
-        <span>{expanded ? "▾ 收起" : "▸ 展开"}</span>
-      </button>
-      {expanded && (
-        <div className="px-3 py-2 space-y-2 border-t border-line/60">
-          {tools.map((t) => (
-            <div key={t.callId} className="font-mono text-2xs">
-              <div className="flex items-center gap-2 text-mute">
-                <span className={t.status === "running" ? "text-amber" : t.status === "ok" ? "text-graph" : "text-oxblood"}>
-                  {t.status === "running" ? "⟳" : t.status === "ok" ? "✓" : "✗"}
-                </span>
-                <span className="text-ink">{t.name}</span>
-                {t.args && Object.keys(t.args).length > 0 && (
-                  <span className="text-mute/70">{JSON.stringify(t.args)}</span>
-                )}
-              </div>
-              {t.result && (
-                <pre className="mt-1 whitespace-pre-wrap text-mute/70 max-h-24 overflow-y-auto bg-panel/60 rounded px-2 py-1">
-                  {t.result}
-                </pre>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -118,3 +118,14 @@ def emit_task_metrics(task_id: str, task_name: str, status: str, **kwargs) -> No
         task_name=task_name, status=status, **kwargs,
     )
     emit_event("metrics.task", key=task_id, data=event.model_dump())
+
+
+def emit_memory_metrics(event_type: str, conversation_id: str,
+                        count: int, memory_type: str = "") -> None:
+    """Memory-Ops（ADR-0017）：记忆抽取/召回计数。fire-and-forget，无 producer 时静默。"""
+    from app.ai.events.schemas import MemoryMetricsEvent
+    event = MemoryMetricsEvent(
+        event_id=uuid.uuid4().hex, event_type=event_type,
+        conversation_id=conversation_id, count=count, memory_type=memory_type,
+    )
+    emit_event("metrics.memory", key=conversation_id, data=event.model_dump())

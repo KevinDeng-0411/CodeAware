@@ -150,6 +150,100 @@ export interface MemoryListVO {
   records: MemoryListItem[];
 }
 
+// ---------- Agent Runs（ADR-0017）----------
+export interface AgentRunListItem {
+  id: number;
+  turn_id: string;
+  conversation_id: string;
+  query: string;
+  status: string; // completed | empty | error | cancelled
+  stop_reason: string;
+  steps: number;
+  tool_calls: number;
+  error_tools: number;
+  needs_review: boolean;
+  review_status: string; // pending | accepted | rejected
+  synced: boolean;
+  error: string | null;
+  created_at: string | null;
+}
+
+export interface AgentRunListVO {
+  total: number;
+  page: number;
+  size: number;
+  records: AgentRunListItem[];
+}
+
+export interface TraceThought {
+  type: "thought";
+  step: number;
+  chars: number;
+  reasoning?: string; // 仅 agent_trace_include_reasoning=True 时存在
+}
+export interface TraceToolCall {
+  type: "tool_call";
+  step: number;
+  name: string;
+  args: Record<string, unknown>;
+  call_id: string;
+}
+export interface TraceToolResult {
+  type: "tool_result";
+  step: number;
+  call_id: string;
+  status: "ok" | "error";
+  result: string;
+  doc_ids: number[];
+}
+export interface TraceAnswer {
+  type: "answer";
+  step: number;
+  content: string;
+}
+export interface TraceConvergenceOverride {
+  type: "convergence_override";
+  step: number;
+  tool_calls: unknown[];
+}
+export type TraceEntry =
+  | TraceThought
+  | TraceToolCall
+  | TraceToolResult
+  | TraceAnswer
+  | TraceConvergenceOverride;
+
+export interface MemoryRefVO {
+  content: string;
+  memory_type: string;
+  similarity: number;
+}
+export interface ContextSnapshot {
+  summary: string | null;
+  window: { count: number };
+  memory_refs: MemoryRefVO[];
+  knowledge_refs: { document_id: number; title: string; snippet: string; match_type: string; score: number }[];
+}
+
+export interface AgentRunDetail extends AgentRunListItem {
+  expected_tools: string[] | null;
+  category: string | null;
+  trace: TraceEntry[];
+  context_snapshot: ContextSnapshot | null;
+}
+
+export interface AgentRunStats {
+  total: number;
+  needs_review_pending: number;
+  status_counts: Record<string, number>;
+}
+
+export interface AgentRunReviewInput {
+  decision: "accepted" | "rejected";
+  expected_tools?: string[];
+  category?: string;
+}
+
 // ---------- Prompt ----------
 export interface PromptTemplateItem {
   id: number;

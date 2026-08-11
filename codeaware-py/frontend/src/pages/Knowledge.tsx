@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { knowledge } from "../api/client";
 import type { DocumentDetailVO, DocumentVO, KnowledgeSearchHit } from "../api/types";
+import { useAgentOps } from "../store/agentOps";
 import {
   Button,
   EmptyState,
@@ -69,6 +70,17 @@ export default function KnowledgePage() {
     }
   };
   const closeDetail = () => setDetail(null);
+
+  // ADR-0017：从 Agent Runs 点 doc 节点跳转进来时自动打开该文档详情
+  const focusDocId = useAgentOps((s) => s.knowledgeFocusDocId);
+  const clearKnowledgeFocus = useAgentOps((s) => s.clearKnowledgeFocus);
+  useEffect(() => {
+    if (focusDocId) {
+      void openDetail(focusDocId);
+      clearKnowledgeFocus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusDocId]);
 
   // 普通函数（不用 useCallback）：避免 toast 引用不稳定导致 useEffect 无限重跑。
   // useEffect 只依赖 [tab, docStatus] 触发；分页/刷新显式调用 loadDocs。

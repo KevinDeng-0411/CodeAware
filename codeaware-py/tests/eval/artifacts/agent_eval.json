@@ -8,7 +8,7 @@
   "closure": {
     "closed_mean": 1.0,
     "closed_ok": 18,
-    "avg_steps": 2.28
+    "avg_steps": 2.44
   },
   "direct": {
     "n": 3,
@@ -33,7 +33,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据团队知识库文档（《缓存击穿方案》），回答如下：\n\n## 缓存击穿\n\n**定义**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB），导致数据库过载。\n\n## 解决方案\n\n知识库给出的方案有两种：\n\n### 1. 互斥锁（Mute"
+      "answer_preview": "根据知识库文档《缓存击穿方案》（id=2），回答如下：\n\n## 缓存击穿是什么\n\n**热点 Key 失效的瞬间，大量请求同时打到数据库（DB）**，导致数据库过载。与\"雪崩\"（大量 Key 同时失效）不同，击穿是**单个热点 Key** 在"
     },
     {
       "query": "RAG 混合检索是怎么融合的？",
@@ -44,6 +44,7 @@
       "predicted": [
         "search_knowledge",
         "search_knowledge",
+        "get_document",
         "list_documents",
         "get_document"
       ],
@@ -51,8 +52,8 @@
       "recall": true,
       "exact": false,
       "closed": true,
-      "steps": 3,
-      "answer_preview": "根据知识库文档（`RAG 混合检索`，id=5），RAG 混合检索的融合流程如下：\n\n## 融合流程\n\n**查询重写 → 双路检索 → RRF 融合**\n\n### 1. 查询重写\n对用户的原始查询先进行重写，得到更利于检索的查询形式。\n\n#"
+      "steps": 4,
+      "answer_preview": "根据知识库文档《RAG 混合检索》（id=5），RAG 混合检索的融合流程如下：\n\n## 融合链路\n\n```\n查询重写 → BM25 关键词 + pgvector 向量 → RRF 融合\n```\n\n具体分三步：\n\n1. **查询重写（Que"
     },
     {
       "query": "DeepSeek thinking 模式怎么用？",
@@ -71,7 +72,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库中《DeepSeek 集成》文档的内容，DeepSeek thinking 模式的使用要点如下：\n\n## DeepSeek thinking 模式使用要点\n\n**thinking 模式（开启思考）**\n- 使用 `json_mod"
+      "answer_preview": "根据知识库文档《DeepSeek 集成》（id=9），关于 DeepSeek thinking 模式的使用说明如下：\n\n## DeepSeek thinking 模式用法\n\n### thinking 模式（开启思考）\n- **输出格式**："
     },
     {
       "query": "缓存击穿方案的完整内容是什么？",
@@ -89,8 +90,8 @@
       "recall": true,
       "exact": false,
       "closed": true,
-      "steps": 2,
-      "answer_preview": "知识库中「缓存击穿方案」文档（id=2，状态 ACTIVE）的完整内容如下：\n\n---\n\n## 缓存击穿\n\n**问题场景**：热点 Key 失效的瞬间，大量请求同时打到数据库（DB）。\n\n**解决方案**：互斥锁（Mutex Lock）、逻"
+      "steps": 3,
+      "answer_preview": "知识库中「缓存击穿方案」（文档 id=2）的完整内容如下：\n\n---\n\n**标题**: 缓存击穿方案\n**状态**: ACTIVE\n**来源**: MANUAL\n\n## 缓存击穿\n\n热点 Key 失效瞬间大量请求打 DB。方案：**互斥锁、"
     },
     {
       "query": "RAG 混合检索的完整实现是什么？",
@@ -110,7 +111,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库文档 **id=5「RAG 混合检索」**（状态: ACTIVE，来源: MANUAL），完整的实现链路如下：\n\n## RAG 混合检索实现\n\n**核心流程（三段式管线）：**\n\n```\n查询重写 → BM25 关键词检索 + p"
+      "answer_preview": "根据知识库文档（id=5《RAG 混合检索》及相关文档），RAG 混合检索的完整实现如下：\n\n## 整体流程\n\n**查询重写 → BM25 关键词 + pgvector 向量 → RRF 融合**\n\n### 1. 查询重写（Query Re"
     },
     {
       "query": "FastAPI 异步架构是怎么设计的？",
@@ -130,7 +131,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库中的专门文档（《FastAPI 异步架构》，id=7），结合相关文档片段，我整理如下：\n\n## FastAPI 异步架构设计要点\n\n**核心原则：全异步（Full Async）**，即从入口到数据访问的整条链路都使用异步实现，避免"
+      "answer_preview": "根据知识库文档 **《FastAPI 异步架构》(id=7, ACTIVE, MANUAL)**，回答如下：\n\n## FastAPI 异步架构设计\n\n整个项目采用**全异步**架构，核心设计如下：\n\n### 1. 全异步技术栈\n- **as"
     },
     {
       "query": "帮我计算 123 乘以 456",
@@ -162,7 +163,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "2024 除以 4 的余数是 **0**（2024 能被 4 整除，所以是闰年）。"
+      "answer_preview": "2024 除以 4 的余数是 **0**（2024 能被 4 整除）。"
     },
     {
       "query": "计算 3.14 乘以 2 的平方",
@@ -194,7 +195,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "现在是 **2026年8月10日（星期一）15:18:35**。"
+      "answer_preview": "现在是 **2026年8月11日 星期二 12:31**。"
     },
     {
       "query": "今天星期几？",
@@ -210,7 +211,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "今天是**星期一**（2026年8月10日）。"
+      "answer_preview": "今天是 **星期二**（2026年8月11日）。"
     },
     {
       "query": "现在是什么日期？",
@@ -226,7 +227,7 @@
       "exact": true,
       "closed": true,
       "steps": 2,
-      "answer_preview": "今天是 **2026年8月10日，星期一**，当前时间为下午 3 点 18 分。"
+      "answer_preview": "当前日期是 **2026年8月11日，星期二**，时间为 12:31。"
     },
     {
       "query": "对比缓存击穿和缓存穿透的解决方案",
@@ -248,7 +249,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库中的文档（《缓存击穿方案》和《缓存穿透方案》），两者对比如下：\n\n## 缓存击穿 vs 缓存穿透\n\n### 缓存击穿\n- **定义**：热点 Key 失效的瞬间，大量请求同时打到数据库\n- **触发场景**：某个**热点数据**的"
+      "answer_preview": "已获取知识库中相关文档，下面基于文档内容对比缓存击穿与缓存穿透的解决方案。\n\n---\n\n## 缓存击穿 vs 缓存穿透\n\n### 问题定义不同\n\n| | 缓存击穿 | 缓存穿透 |\n|---|---|---|\n| **场景** | 热点 K"
     },
     {
       "query": "短期记忆和长期记忆有什么区别？",
@@ -261,6 +262,8 @@
       "predicted": [
         "search_knowledge",
         "search_knowledge",
+        "search_knowledge",
+        "search_knowledge",
         "list_documents",
         "get_document",
         "get_document"
@@ -269,8 +272,8 @@
       "recall": true,
       "exact": false,
       "closed": true,
-      "steps": 3,
-      "answer_preview": "根据知识库中的技术文档，系统中\"短期记忆\"和\"长期记忆\"的实现区别如下：\n\n## 短期记忆（ShortTermMemoryManager）\n- **存储方式**：PG messages 表为真相源 + Redis 滑窗缓存，缓存 miss "
+      "steps": 4,
+      "answer_preview": "根据知识库中的文档，短期记忆和长期记忆的区别如下：\n\n## 短期记忆（ShortTermMemoryManager）\n- **存储结构**：以 PG messages 为真相源，Redis 滑窗缓存作为加速层，缓存 miss 时回查 PG\n"
     },
     {
       "query": "缓存击穿和缓存雪崩的应对策略有什么不同？",
@@ -292,7 +295,7 @@
       "exact": false,
       "closed": true,
       "steps": 3,
-      "answer_preview": "根据知识库中的文档，我来对比缓存击穿和缓存雪崩的应对策略。\n\n## 核心区别\n\n| 维度 | 缓存击穿 | 缓存雪崩 |\n|------|----------|----------|\n| **问题本质** | **单个热点 Key** 失效"
+      "answer_preview": "根据知识库中的《缓存击穿方案》和《缓存雪崩方案》两份文档，两者的应对策略差异如下：\n\n## 核心区别\n\n| 维度 | 缓存击穿 | 缓存雪崩 |\n|------|---------|---------|\n| **问题定义** | **单个热"
     },
     {
       "query": "你好",
@@ -304,7 +307,7 @@
       "exact": true,
       "closed": true,
       "steps": 1,
-      "answer_preview": "你好！我是 CodeAware Agent，可以帮你：\n\n- 📚 **检索知识库**：查询团队的技术文档、规范、设计文档、操作手册等\n- 🔢 **精确计算**：处理数学表达式运算\n- 🕐 **查询时间**：获取当前日期和时间\n\n有什么我可以"
+      "answer_preview": "你好！我是 CodeAware Agent，可以帮你查找团队知识库中的技术文档，也可以进行精确计算、查询当前时间等。\n\n有什么我可以帮你的吗？比如：\n- 查询某份设计文档、规范或操作手册\n- 计算某个数学表达式\n- 查看当前日期时间"
     },
     {
       "query": "你是谁？",
@@ -316,7 +319,7 @@
       "exact": true,
       "closed": true,
       "steps": 1,
-      "answer_preview": "我是 CodeAware Agent，一个能自主调用工具来回答问题的智能助手。我的知识库包含团队的技术文档，回答问题时我会优先检索知识库，确保答案有据可依。\n\n我具备以下能力：\n- **检索知识库**：查找规范、设计文档、团队约定、代码说明"
+      "answer_preview": "我是 **CodeAware Agent**，一个能自主调用工具来回答问题的智能助手。\n\n我的知识库中包含团队的技术文档，回答问题时我会优先检索知识库，确保答案有依据。我具备以下能力：\n\n- **检索知识库**：查找规范、设计文档、团队约定"
     },
     {
       "query": "谢谢你的帮助",
@@ -328,7 +331,7 @@
       "exact": true,
       "closed": true,
       "steps": 1,
-      "answer_preview": "不客气！😊 很高兴能帮到你。\n\n如果之后有任何问题——无论是技术规范、知识库文档检索，还是需要计算或查询时间——随时都可以来问我。祝你工作顺利！"
+      "answer_preview": "不客气！如果之后有任何问题需要查询知识库、计算或确认时间，随时告诉我，我会尽力帮你解答。😊"
     }
   ]
 }

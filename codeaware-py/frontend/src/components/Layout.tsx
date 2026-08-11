@@ -20,7 +20,8 @@ export type PageId =
   | "readme"
   | "knowledge"
   | "memory"
-  | "prompt";
+  | "prompt"
+  | "agent-runs";
 
 const NAV: { id: PageId; label: string; icon: typeof MessageSquare; hint: string }[] = [
   { id: "chat", label: "Chat", icon: MessageSquare, hint: "核心域" },
@@ -30,6 +31,7 @@ const NAV: { id: PageId; label: string; icon: typeof MessageSquare; hint: string
   { id: "knowledge", label: "Knowledge", icon: Library, hint: "RAG 检索" },
   { id: "memory", label: "Memory", icon: Brain, hint: "长期记忆" },
   { id: "prompt", label: "Prompt", icon: Settings2, hint: "模板管理" },
+  { id: "agent-runs", label: "Agent Runs", icon: Activity, hint: "回放评审" },
 ];
 
 export default function Layout({

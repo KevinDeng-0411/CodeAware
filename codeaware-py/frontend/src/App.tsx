@@ -8,6 +8,7 @@ import AiReadmePage from "./pages/AiReadme";
 import KnowledgePage from "./pages/Knowledge";
 import MemoryPage from "./pages/Memory";
 import PromptPage from "./pages/Prompt";
+import AgentRunsPage from "./pages/AgentRuns";
 import LoginPage from "./pages/Login";
 import { useAuth } from "./store/auth";
 
@@ -37,6 +38,7 @@ export default function App() {
       {page === "knowledge" && <KnowledgePage />}
       {page === "memory" && <MemoryPage />}
       {page === "prompt" && <PromptPage />}
+      {page === "agent-runs" && <AgentRunsPage onNavigate={setPage} />}
     </Layout>
   );
 }

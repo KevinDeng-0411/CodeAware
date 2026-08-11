@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.ai.agent.guardrails import detect_query_injection
+from app.core.config import settings
 from app.schemas.chat_events import Component
 
 
@@ -24,6 +26,17 @@ class ChatRequest(BaseModel):
     def message_must_not_be_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("message must not be blank")
+        return value
+
+    @field_validator("message")
+    @classmethod
+    def message_reject_injection(cls, value: str) -> str:
+        """Guardrail（ADR-0017 D2）：请求边界 fail-closed 拒绝疑似提示注入查询。
+
+        RAG/Agent 双模式生效（都在请求边界）；guardrails_enabled=False 时跳过。
+        """
+        if settings.guardrails_enabled and detect_query_injection(value):
+            raise ValueError("message 疑似提示注入，已拒绝")
         return value
 
 

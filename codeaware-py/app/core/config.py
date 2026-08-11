@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     reranker_model: str = "bge-reranker-v2-m3"
     reranker_top_n: int = 20  # 粗排候选池大小（多路召回 chunk 数，可调 20-30）
 
+    # LLMOps（ADR-0017）
+    guardrails_enabled: bool = True  # 请求边界注入检测（fail-closed 拒绝可疑查询）
+    agent_trace_include_reasoning: bool = False  # True=thought 完整 reasoning 保留进 trace（默认只存元数据）
+
     # 认证（团队化升级阶段 A：JWT access token，实验室内部使用）
     jwt_secret_key: str = ""  # 启动时校验非空（fail-closed）；测试由 fixture 注入
     jwt_algorithm: str = "HS256"

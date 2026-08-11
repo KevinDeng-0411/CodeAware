@@ -1,6 +1,11 @@
 // API client - 解包统一响应包络，失败抛 ApiError；SSE 流式单独处理
 import { getToken, onAuthFailure } from "./auth";
 import type {
+  AgentRunDetail,
+  AgentRunListItem,
+  AgentRunListVO,
+  AgentRunReviewInput,
+  AgentRunStats,
   AiReadmeCapability,
   AiReadmeVO,
   ChatMessage,
@@ -217,6 +222,34 @@ export const memory = {
       `/api/memory/long-term/search?query=${encodeURIComponent(query)}&threshold=${threshold}&top_k=${topK}`,
     ),
   remove: (id: number) => call<null>(`/api/memory/long-term/${id}`, { method: "DELETE" }),
+};
+
+// ---------- Agent Runs（ADR-0017）----------
+export const agentRuns = {
+  list: (params: {
+    page?: number;
+    size?: number;
+    conversation_id?: string;
+    needs_review?: boolean;
+    review_status?: string;
+  } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.size) qs.set("size", String(params.size));
+    if (params.conversation_id) qs.set("conversation_id", params.conversation_id);
+    if (params.needs_review !== undefined) qs.set("needs_review", String(params.needs_review));
+    if (params.review_status) qs.set("review_status", params.review_status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return call<AgentRunListVO>(`/api/chat/agent-runs${suffix}`);
+  },
+  detail: (turnId: string) =>
+    call<AgentRunDetail>(`/api/chat/agent-runs/${encodeURIComponent(turnId)}`),
+  review: (turnId: string, input: AgentRunReviewInput) =>
+    call<AgentRunListItem>(`/api/chat/agent-runs/${encodeURIComponent(turnId)}/review`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  stats: () => call<AgentRunStats>("/api/chat/agent-runs/stats"),
 };
 
 // ---------- Prompt ----------

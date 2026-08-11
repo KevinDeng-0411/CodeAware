@@ -66,6 +66,18 @@ class TaskMetricsEvent(BaseEvent):
     error: str | None = None
 
 
+class MemoryMetricsEvent(BaseEvent):
+    """Memory-Ops 指标（ADR-0017）：记忆抽取/召回计数。
+
+    - extraction：count = 抽取到的事实数（0 也发，reason 存 memory_type）
+    - recall：count = 本轮注入的长期记忆数（命中才发）
+    """
+    event_type: str  # extraction | recall
+    conversation_id: str
+    count: int = 0
+    memory_type: str = ""  # extraction 的 reason（already_has_memories 等）/ 记忆类型
+
+
 class ErrorEvent(BaseEvent):
     """系统异常事件。"""
     component: str

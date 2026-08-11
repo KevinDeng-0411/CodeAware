@@ -4,8 +4,9 @@ import hashlib
 import logging
 
 import anyio
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.services.chat import ChatService
@@ -19,7 +20,14 @@ from app.ai.services.turn_coordinator import (
 from app.api.v1.deps import get_chat_service, get_current_user, get_db, get_turn_coordinator
 from app.core.response import Result
 from app.db.redis import redis_client
-from app.models import Conversation, Message, User
+from app.models import AgentRun, Conversation, Message, User
+from app.schemas.agent_run import (
+    AgentRunDetail,
+    AgentRunListItem,
+    AgentRunListVO,
+    AgentRunReviewRequest,
+    AgentRunStats,
+)
 from app.schemas.chat import (
     ChatMessageVO,
     ChatRequest,
@@ -303,3 +311,140 @@ async def get_conversation(conversation_id: str, db: AsyncSession = Depends(get_
 async def delete_conversation(conversation_id: str, svc: ChatService = Depends(get_chat_service), user: User = Depends(get_current_user)):
     await svc.delete_conversation(conversation_id, user_id=user.id)
     return Result.ok()
+
+
+# ============ Agent Runs 回放/评审（ADR-0017）============
+# 路由顺序注意：/agent-runs/stats 必须在 /agent-runs/{turn_id} 之前声明，
+# 否则 "stats" 会被 {turn_id} 吞掉。
+
+
+def _agent_run_item(r: AgentRun) -> dict:
+    return {
+        "id": r.id,
+        "turn_id": r.turn_id,
+        "conversation_id": r.conversation_id,
+        "query": r.query,
+        "status": r.status,
+        "stop_reason": r.stop_reason,
+        "steps": r.steps,
+        "tool_calls": r.tool_calls,
+        "error_tools": r.error_tools,
+        "needs_review": r.needs_review,
+        "review_status": r.review_status,
+        "synced": r.synced,
+        "error": r.error,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+def _ownership_filter(user: User):
+    """归属校验（照抄 get_conversation）：null 会话对登录用户可见。"""
+    return (Conversation.user_id == user.id) | (Conversation.user_id.is_(None))
+
+
+@router.get("/agent-runs", response_model=Result[AgentRunListVO])
+async def list_agent_runs(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    conversation_id: str | None = Query(None, max_length=64),
+    needs_review: bool | None = Query(None),
+    review_status: str | None = Query(None, pattern="^(pending|accepted|rejected)$"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Agent run 列表（分页 + 可选过滤），归属 JOIN conversations。"""
+    base = select(AgentRun).join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+    count_stmt = select(func.count()).select_from(AgentRun).join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+    cond = [_ownership_filter(user)]
+    if conversation_id:
+        cond.append(AgentRun.conversation_id == conversation_id)
+    if needs_review is not None:
+        cond.append(AgentRun.needs_review.is_(needs_review))
+    if review_status:
+        cond.append(AgentRun.review_status == review_status)
+    base = base.where(*cond)
+    count_stmt = count_stmt.where(*cond)
+    total = await db.scalar(count_stmt) or 0
+    rows = (
+        await db.execute(base.order_by(AgentRun.id.desc()).offset((page - 1) * size).limit(size))
+    ).scalars().all()
+    return Result.ok(
+        AgentRunListVO(total=total, page=page, size=size, records=[_agent_run_item(r) for r in rows])
+    )
+
+
+@router.get("/agent-runs/stats", response_model=Result[AgentRunStats])
+async def get_agent_run_stats(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Agent run 统计条（total / 待评审 / status 分布），页面头部展示。"""
+    base = (
+        select(func.count(AgentRun.id))
+        .join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+        .where(_ownership_filter(user))
+    )
+    total = await db.scalar(base) or 0
+    pending = (
+        await db.scalar(
+            base.where(AgentRun.needs_review.is_(True), AgentRun.review_status == "pending")
+        )
+        or 0
+    )
+    rows = await db.execute(
+        select(AgentRun.status, func.count(AgentRun.id))
+        .join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+        .where(_ownership_filter(user))
+        .group_by(AgentRun.status)
+    )
+    status_counts = {status: count for status, count in rows.all()}
+    return Result.ok(
+        AgentRunStats(total=total, needs_review_pending=pending, status_counts=status_counts)
+    )
+
+
+@router.get("/agent-runs/{turn_id}", response_model=Result[AgentRunDetail])
+async def get_agent_run(turn_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """单 run 完整回放：metadata + trace + context_snapshot。归属不匹配返回 404。"""
+    run = await db.scalar(
+        select(AgentRun)
+        .join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+        .where(AgentRun.turn_id == turn_id, _ownership_filter(user))
+    )
+    if run is None:
+        return _error(404, "AGENT_RUN_NOT_FOUND")
+    return Result.ok(
+        AgentRunDetail(
+            id=run.id, turn_id=run.turn_id, conversation_id=run.conversation_id,
+            query=run.query, status=run.status, stop_reason=run.stop_reason,
+            steps=run.steps, tool_calls=run.tool_calls, error_tools=run.error_tools,
+            needs_review=run.needs_review, review_status=run.review_status,
+            expected_tools=run.expected_tools, category=run.category, synced=run.synced,
+            error=run.error, trace=run.trace or [], context_snapshot=run.context_snapshot,
+            created_at=run.created_at.isoformat() if run.created_at else None,
+        )
+    )
+
+
+@router.post("/agent-runs/{turn_id}/review", response_model=Result[AgentRunListItem])
+async def review_agent_run(
+    turn_id: str,
+    req: AgentRunReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """评审（失败沉淀）：accepted 需 expected_tools + category；rejected 直接拒绝。"""
+    run = await db.scalar(
+        select(AgentRun)
+        .join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+        .where(AgentRun.turn_id == turn_id, _ownership_filter(user))
+    )
+    if run is None:
+        return _error(404, "AGENT_RUN_NOT_FOUND")
+    if req.decision == "accepted":
+        if not req.expected_tools or not req.category:
+            return _error(422, "AGENT_RUN_REVIEW_INVALID")
+        run.review_status = "accepted"
+        run.expected_tools = req.expected_tools
+        run.category = req.category
+    else:
+        run.review_status = "rejected"
+    await db.commit()
+    return Result.ok(_agent_run_item(run))

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { aiReadme, ApiError, knowledge, memory, prompt, readApiErrorMessage } from "./client";
+import { agentRuns, aiReadme, ApiError, knowledge, memory, prompt, readApiErrorMessage } from "./client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -304,5 +304,85 @@ describe("knowledge.getDetail", () => {
     expect(data.content).toContain("缓存击穿");
     expect(data.chunks).toHaveLength(2);
     expect(data.chunks[1].chunk_index).toBe(1);
+  });
+});
+
+describe("agentRuns.list", () => {
+  it("拼接 page/size/needs_review 查询参数", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 1,
+        msg: "success",
+        data: { total: 1, page: 2, size: 10, records: [] },
+      }),
+    } as Response);
+    const data = await agentRuns.list({ page: 2, size: 10, needs_review: true });
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs?page=2&size=10&needs_review=true");
+    expect(data.total).toBe(1);
+  });
+
+  it("无过滤时不拼接查询字符串", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 1,
+        msg: "success",
+        data: { total: 0, page: 1, size: 10, records: [] },
+      }),
+    } as Response);
+    await agentRuns.list();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs");
+  });
+});
+
+describe("agentRuns.detail/review/stats", () => {
+  it("detail 请求路径", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 1, msg: "success", data: { turn_id: "t1", trace: [] } }),
+    } as Response);
+    const data = await agentRuns.detail("t1");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs/t1");
+    expect(data.turn_id).toBe("t1");
+  });
+
+  it("review POST 带 decision body", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 1, msg: "success", data: { turn_id: "t1" } }),
+    } as Response);
+    await agentRuns.review("t1", {
+      decision: "accepted",
+      expected_tools: ["search_knowledge"],
+      category: "need_search",
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs/t1/review");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      decision: "accepted",
+      expected_tools: ["search_knowledge"],
+      category: "need_search",
+    });
+  });
+
+  it("stats 请求路径", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 1,
+        msg: "success",
+        data: { total: 3, needs_review_pending: 1, status_counts: { completed: 2, error: 1 } },
+      }),
+    } as Response);
+    const data = await agentRuns.stats();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs/stats");
+    expect(data.needs_review_pending).toBe(1);
   });
 });

@@ -32,7 +32,7 @@ from app.ai.services.rag import RagService
 from app.core.config import settings
 from app.core.enums import PromptType
 from app.db.session import AsyncSessionLocal
-from app.models import Conversation, Document, LongTermMemory
+from app.models import AgentRun, Conversation, Document, LongTermMemory
 from app.schemas.chat_events import (
     ChatCompleted,
     ChatFailed,
@@ -50,6 +50,34 @@ from app.schemas.chat_events import (
 MEMORY_EXTRACT_THRESHOLD = 4
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_needs_review(status: str, state: ReactLoopState) -> bool:
+    """失败沉淀判定（ADR-0017）：error/empty/工具真实异常 → 待评审；cancelled 除外。
+
+    与 eval 的 closure 语义一致：空终答 = 失败（用户什么都没得到）。
+    """
+    if status == "cancelled":
+        return False
+    return status in ("error", "empty") or state.error_tools > 0
+
+
+def _strip_reasoning(trace: list) -> list:
+    """按 agent_trace_include_reasoning 脱敏 thought 条目的 reasoning 全文（ADR-0017 D1）。
+
+    默认只留 {type, step, chars}；开启后保留完整思考文本（调试/复盘用）。
+    """
+    if settings.agent_trace_include_reasoning:
+        return trace
+    stripped = []
+    for entry in trace:
+        if entry.get("type") == "thought":
+            e = dict(entry)
+            e.pop("reasoning", None)
+            stripped.append(e)
+        else:
+            stripped.append(entry)
+    return stripped
 
 
 class ChatTurnInProgress(Exception):
@@ -127,6 +155,50 @@ class TurnCoordinator:
         from app.ai.events.producer import emit_error_event
 
         emit_error_event(component=component, code=code, message="", details={"conversation_id": cid})
+
+    async def _persist_agent_run(
+        self,
+        cid: str,
+        turn_id: str,
+        query: str,
+        state: ReactLoopState,
+        *,
+        status: str,
+        context: dict | None = None,
+        stop_reason: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Best-effort 写 agent_runs（ADR-0017）。失败只 warning，不 fail turn。
+
+        短事务（AsyncSessionLocal 自建自关，不跨模型等待持有连接）。只记录稳定标识
+        与脱敏错误码，不记录用户消息/reasoning 全文（reasoning 按配置脱敏）。
+        """
+        try:
+            run = AgentRun(
+                turn_id=turn_id,
+                conversation_id=cid,
+                query=query,
+                status=status,
+                stop_reason=stop_reason or state.stop_reason,
+                steps=state.steps,
+                tool_calls=state.tool_calls,
+                error_tools=state.error_tools,
+                needs_review=_compute_needs_review(status, state),
+                trace=_strip_reasoning(state.trace),
+                context_snapshot=context,
+                error=error,
+            )
+            async with AsyncSessionLocal() as s:
+                s.add(run)
+                await s.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "agent run persist failed code=agent_run_persist_failed "
+                "conversation_id=%s turn_id=%s error_type=%s",
+                cid,
+                turn_id,
+                type(exc).__name__,
+            )
 
     def _context_warning(
         self, cid: str, component: str, code: str, message: str
@@ -267,6 +339,7 @@ class TurnCoordinator:
             agent_mode = settings.chat_mode == "agent"
             prompt: str | None = None
             messages = None
+            context_snapshot: dict | None = None  # agent 模式：本轮上下文快照（ADR-0017）
             if agent_mode:
                 # agent 模式：构造 LangChain messages（记忆/历史/摘要注入，
                 # 跳过 RAG 预检索，检索决策交给 search_knowledge 工具）
@@ -278,12 +351,13 @@ class TurnCoordinator:
                     tools = toolkit.get_tools()
                     tool_map = {t.name: t for t in tools}
                     tools_desc = "\n".join(f"- {t.name}: {t.description}" for t in tools)
-                    messages, ctx_warns, refs = (
+                    messages, ctx_warns, refs, snapshot = (
                         await self.context_builder.build_agent_messages(
                             cid, message, self._context_warning,
                             self._build_agent_system_prompt(tools_desc),
                         )
                     )
+                    context_snapshot = snapshot
                 except Exception:
                     self._log_failure(
                         cid, turn_id, "context", "prompt_context", "CONTEXT_FAILED"
@@ -325,13 +399,13 @@ class TurnCoordinator:
             # agent：ReAct 工具循环（模型自主决策）；rag：单次 astream
             text = ""
             model_stream = None
+            state = ReactLoopState()  # agent run 状态（预创建，异常/cancelled 路径可用）
             try:
                 if agent_mode:
                     bound = self.chat_model.bind_tools(
                         list(tool_map.values()), tool_choice="auto",
                         extra_body={"thinking": {"type": "enabled"}},
                     )
-                    state = ReactLoopState()
                     async for ev in react_loop(
                         bound, messages, tool_map, cid, turn_id, nxt, state
                     ):
@@ -357,6 +431,13 @@ class TurnCoordinator:
                                 conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=delta
                             )
             except asyncio.CancelledError:
+                if agent_mode:
+                    # 客户端断开也落 cancelled run（可观测的失败模式，best-effort）
+                    await self._persist_agent_run(
+                        cid, turn_id, message, state,
+                        status="cancelled", stop_reason="cancelled",
+                        context=context_snapshot,
+                    )
                 raise  # 客户端断开：丢弃 partial、保留 USER、不伪造终态
             except Exception:
                 self._log_failure(
@@ -367,6 +448,13 @@ class TurnCoordinator:
                     error=ErrorInfo(code="MODEL_STREAM_FAILED", message="模型生成失败", retryable=True),
                     partial_output_persisted=False,
                 )
+                if agent_mode:
+                    # 模型异常也落 error run（best-effort，含失败前 partial trace）
+                    await self._persist_agent_run(
+                        cid, turn_id, message, state,
+                        status="error", stop_reason="error",
+                        error="MODEL_STREAM_FAILED", context=context_snapshot,
+                    )
                 terminal_emitted = True
                 return
             finally:
@@ -386,6 +474,14 @@ class TurnCoordinator:
                                 cid,
                                 turn_id,
                             )
+
+            # ---- LLMOps（ADR-0017）：agent 成功路径落 run（best-effort）----
+            if agent_mode:
+                run_status = "empty" if not text.strip() else "completed"
+                await self._persist_agent_run(
+                    cid, turn_id, message, state,
+                    status=run_status, context=context_snapshot,
+                )
 
             # ---- Transaction B: persist ASSISTANT + commit ----
             assistant_id = await self._txn_assistant(cid, text)

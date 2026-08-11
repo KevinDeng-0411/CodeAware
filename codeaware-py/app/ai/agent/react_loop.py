@@ -9,6 +9,10 @@
 
 本模块是 async generator：yield typed ChatEvent（reasoning/token/tool 事件），
 最终答案填进 state.text（async generator 不能 return 值，用 state 传回）。
+
+LLMOps（ADR-0017）：state 同时累积 trace（thought/tool_call/tool_result/answer 按序，
+含每轮 reasoning 全文——持久化层按 agent_trace_include_reasoning 脱敏）、
+stop_reason / tool_calls / error_tools，供 run 落库回放。
 """
 
 from dataclasses import dataclass, field
@@ -30,33 +34,61 @@ TOOL_CALL_LIMITS = {
     "get_current_time": 1,
 }
 
+# stop_reason 取值：final / no_output / max_steps / converged / error / cancelled
+STOP_REASON_FINAL = "final"
+STOP_REASON_NO_OUTPUT = "no_output"
+STOP_REASON_MAX_STEPS = "max_steps"
+STOP_REASON_CONVERGED = "converged"
+
 
 @dataclass
 class ReactLoopState:
-    """循环结果：最终答案 + 消耗步数。"""
+    """循环结果：最终答案 + 消耗步数 + trace（ADR-0017）。
+
+    trace/stop_reason/tool_calls/error_tools 为 LLMOps 观测字段（带默认值，
+    向后兼容 eval 直接构造 ReactLoopState()）。
+    """
 
     text: str = ""
     steps: int = 0
+    trace: list = field(default_factory=list)
+    stop_reason: str = STOP_REASON_FINAL
+    tool_calls: int = 0
+    error_tools: int = 0
 
 
-async def _execute_tool(tc: dict, tool_map: dict) -> tuple[str, bool, frozenset]:
-    """执行工具，返回 (展示文本, 是否成功, doc_ids 签名)。
+def _trace_thought(state: ReactLoopState, step: int, reasoning: str) -> None:
+    """追加 thought 条目。reasoning 全文暂存内存，持久化层按配置脱敏。"""
+    state.trace.append(
+        {"type": "thought", "step": step, "chars": len(reasoning), "reasoning": reasoning}
+    )
+
+
+def _trace_answer(state: ReactLoopState, step: int, content: str) -> None:
+    state.trace.append({"type": "answer", "step": step, "content": content})
+
+
+async def _execute_tool(tc: dict, tool_map: dict) -> tuple[str, bool, frozenset, bool]:
+    """执行工具，返回 (展示文本, 是否成功, doc_ids 签名, 是否真实异常)。
 
     支持结构化 ToolObservation（search/get_document 返回 display + doc_ids）和
     纯 str（calculate/time 等无文档工具）。鸭子类型解构，避免循环依赖。
+
+    第 4 项 is_exception 区分"工具真实异常"（需评审）与"正常返回错误文本"
+    （未知工具/业务错误是合法结果）：ADR-0017 失败沉淀只追真实异常。
     """
     name = tc["name"]
     args = tc.get("args", {})
     if name not in tool_map:
-        return f"未知工具: {name}（可用: {', '.join(tool_map)}）", False, frozenset()
+        return f"未知工具: {name}（可用: {', '.join(tool_map)}）", False, frozenset(), False
     try:
         result = await tool_map[name].ainvoke(args)
         if hasattr(result, "display"):
             doc_ids = getattr(result, "doc_ids", frozenset())
-            return str(result.display), True, frozenset(doc_ids)
-        return str(result), True, frozenset()
+            return str(result.display), True, frozenset(doc_ids), False
+        return str(result), True, frozenset(), False
     except Exception as exc:  # noqa: BLE001
-        return f"工具执行失败: {type(exc).__name__}: {exc}", False, frozenset()
+        return f"工具执行失败: {type(exc).__name__}: {exc}", False, frozenset(), True
 
 
 async def react_loop(
@@ -75,13 +107,14 @@ async def react_loop(
     messages: 初始 LangChain messages（会被就地累积追加）
     tool_map: {工具名: BaseTool}
     nxt: sequence 生成器回调（单调递增）
-    state: 结束时填充 text / steps
+    state: 结束时填充 text / steps / trace / stop_reason / tool_calls / error_tools
     """
     seen_calls: set[tuple[str, str]] = set()
     tool_counts: dict[str, int] = {}
     # 已观察到的文档 id（ADR-0016 收敛检测：检索/文档工具无新 doc_id → 强制终答）
     observed_docs: set[int] = set()
     for step in range(max_steps):
+        round_no = step + 1
         # ---- 1. astream 聚合（含流式 yield reasoning/token）----
         accumulated = None
         async for chunk in model.astream(messages):
@@ -107,8 +140,16 @@ async def react_loop(
         if accumulated is None:
             # 无任何 chunk（异常已在调用方兜底，这里防御性退出）
             state.text = ""
-            state.steps = step + 1
+            state.steps = round_no
+            state.stop_reason = STOP_REASON_NO_OUTPUT
             return
+
+        reasoning_full = (
+            accumulated.additional_kwargs.get("reasoning_content", "")
+            if hasattr(accumulated, "additional_kwargs")
+            else ""
+        )
+        _trace_thought(state, round_no, reasoning_full)
 
         content = accumulated.content or ""
         tool_calls = accumulated.tool_calls or []
@@ -119,9 +160,7 @@ async def react_loop(
                 content=content,
                 tool_calls=tool_calls,
                 additional_kwargs={
-                    "reasoning_content": accumulated.additional_kwargs.get(
-                        "reasoning_content", ""
-                    )
+                    "reasoning_content": reasoning_full,
                 },
             )
         )
@@ -129,7 +168,9 @@ async def react_loop(
         if not tool_calls:
             # ---- 3. 无工具调用：终答 ----
             state.text = content
-            state.steps = step + 1
+            state.steps = round_no
+            state.stop_reason = STOP_REASON_FINAL
+            _trace_answer(state, round_no, content)
             return
 
         # ---- 4. 执行工具 ----
@@ -141,6 +182,11 @@ async def react_loop(
                 conversation_id=cid, turn_id=turn_id, sequence=nxt(),
                 tool_name=name, tool_args=args, tool_call_id=tc["id"],
             )
+            state.tool_calls += 1
+            state.trace.append(
+                {"type": "tool_call", "step": round_no, "name": name,
+                 "args": args, "call_id": tc["id"]}
+            )
 
             # 防过度调用：同工具调用次数超上限则不再执行（eval 实证模型会反复取文档发散）
             tool_counts[name] = tool_counts.get(name, 0) + 1
@@ -148,21 +194,25 @@ async def react_loop(
             # 防打转：相同 (工具, 参数) 跳过重复执行
             seen_key = (name, str(sorted((args or {}).items())))
             if tool_counts[name] > limit:
-                result, ok, doc_ids = (
+                result, ok, doc_ids, is_exception = (
                     f"工具 {name} 已调用 {tool_counts[name]} 次（单轮上限 {limit}），"
                     "请基于已有信息直接回答，不要继续调用该工具。",
                     False,
                     frozenset(),
+                    False,
                 )
             elif seen_key in seen_calls:
-                result, ok, doc_ids = (
+                result, ok, doc_ids, is_exception = (
                     "该工具与参数组合已调用过，请基于已有结果回答或换一种问法。",
                     False,
                     frozenset(),
+                    False,
                 )
             else:
                 seen_calls.add(seen_key)
-                result, ok, doc_ids = await _execute_tool(tc, tool_map)
+                result, ok, doc_ids, is_exception = await _execute_tool(tc, tool_map)
+                if is_exception:
+                    state.error_tools += 1
 
             round_doc_ids |= set(doc_ids)
 
@@ -171,6 +221,11 @@ async def react_loop(
                 conversation_id=cid, turn_id=turn_id, sequence=nxt(),
                 tool_call_id=tc["id"], tool_name=name,
                 status="ok" if ok else "error", result=result_text,
+            )
+            state.trace.append(
+                {"type": "tool_result", "step": round_no, "call_id": tc["id"],
+                 "status": "ok" if ok else "error", "result": result_text,
+                 "doc_ids": sorted(doc_ids)}
             )
             messages.append(
                 ToolMessage(content=result_text, tool_call_id=tc["id"])
@@ -205,11 +260,21 @@ async def react_loop(
                     yield TokenDelta(
                         conversation_id=cid, turn_id=turn_id, sequence=nxt(), delta=delta
                     )
+            # 防御性：强制终答轮若仍产生 tool_calls（模型无视指令），标记而不执行
+            if accumulated is not None and getattr(accumulated, "tool_calls", None):
+                state.trace.append(
+                    {"type": "convergence_override", "step": round_no,
+                     "tool_calls": accumulated.tool_calls}
+                )
             state.text = (accumulated.content or "") if accumulated else ""
-            state.steps = step + 1
+            state.steps = round_no
+            state.stop_reason = STOP_REASON_CONVERGED
+            _trace_answer(state, round_no, state.text)
             return
         observed_docs |= round_doc_ids
 
     # ---- 达步数上限：用最后一轮内容兜底 ----
     state.text = accumulated.content or ""
     state.steps = max_steps
+    state.stop_reason = STOP_REASON_MAX_STEPS
+    _trace_answer(state, max_steps, state.text)

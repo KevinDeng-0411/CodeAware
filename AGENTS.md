@@ -28,6 +28,14 @@
 - 新增/改动工具必须过 Agent eval（`tests/eval/test_agent_eval.py`，live_eval）：
   门禁 recall ≥0.7、closure ≥0.9、direct 不误调 100%。
 - 停止判断三层：模型自评 + 检索收敛检测（doc_id 签名）+ per-tool 上限兜底；改动需重跑 eval。
+- **LLMOps 闭环（ADR-0017）**：每轮 run 落 `agent_runs`（trace + context_snapshot + status），
+  前端 Agent Runs 页回放/评审；新增/改动 react_loop / tools / turn_coordinator 需重跑
+  `test_agent_ops.py` + 全量回归 + live_eval 门禁。
+- **guardrail 在请求边界**（`ChatRequest.message` validator，fail-closed）；**不在工具结果层
+  做注入检测**（知识库是策展内容，误报伤模型理解）。
+- **失败沉淀**：needs_review run → Agent Runs 页评审 accepted → `scripts/sync_regression_cases.py`
+  追加进 `tests/eval/regression_cases.py`（REGRESSION_CASES）→ eval 门禁自动纳入。
+- **trace 默认只存元数据**：完整 reasoning 需 `AGENT_TRACE_INCLUDE_REASONING=true`。
 - 未来高阶（S1-lite → S2-lite → S4-lite → S5-lite）按 chat-to-agent 档案授权。
 
 ## 项目是什么
@@ -66,7 +74,7 @@ app/
 ├── core/                   # config / response / exceptions
 ├── api/v1/                 # 7 router + deps.py
 ├── schemas/                # Pydantic DTO/VO
-├── models/                 # SQLAlchemy ORM（当前基线 9 表）
+├── models/                 # SQLAlchemy ORM（当前基线 10 表）
 ├── ai/
 │   ├── config.py           # LLM/Embedding/reranker 工厂
 │   ├── infra/vector_recall.py   # 共享 VectorRecallService
@@ -81,7 +89,7 @@ app/
 └── repositories/
 ```
 
-## 领域模型（当前基线 9 表，必须遵循 ADR）
+## 领域模型（当前基线 10 表，必须遵循 ADR）
 
 下表约束当前 Chat 基线。只有对应精简阶段已按 evidence/授权解锁后，才可新增该卡明确列出的
 `Project`、`messages.citations_json`、`Repository/RepositorySnapshot` 等增量；不得借未来

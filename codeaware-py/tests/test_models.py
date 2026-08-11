@@ -12,7 +12,7 @@ def _cols(table: str) -> dict:
     return {c.name: c for c in MD.tables[table].columns}
 
 
-def test_table_set_is_9():
+def test_table_set_is_10():
     assert set(MD.tables) == {
         "users",
         "prompt_templates",
@@ -23,6 +23,7 @@ def test_table_set_is_9():
         "documents",
         "knowledge_chunks",
         "ai_readme_documents",
+        "agent_runs",  # ADR-0017 LLMOps run trace
     }
 
 

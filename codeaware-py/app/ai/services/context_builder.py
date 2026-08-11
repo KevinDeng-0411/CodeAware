@@ -25,6 +25,19 @@ from app.models import Document, LongTermMemory
 logger = logging.getLogger(__name__)
 
 
+def _emit_recall_metrics(cid: str, count: int) -> None:
+    """Memory-Ops（ADR-0017）：记忆召回成功时发 recall counter（Kafka，best-effort）。
+
+    emit_memory_metrics 内部对无 producer 静默 no-op，绝不影响调用方。
+    """
+    try:
+        from app.ai.events.producer import emit_memory_metrics
+
+        emit_memory_metrics(event_type="recall", conversation_id=cid, count=count)
+    except Exception:  # noqa: BLE001
+        logger.warning("memory recall metric emit failed conversation_id=%s", cid)
+
+
 class ContextBuilder:
     def __init__(self, chat_model, redis_client, vector_recall, lexical_recall,
                  query_rewriter, chunker, reranker=None) -> None:
@@ -148,6 +161,7 @@ class ContextBuilder:
                     }
                     for memory in recalled
                 ]
+                _emit_recall_metrics(cid, len(recalled))
         except Exception:
             warnings.append(warn_callback(cid, "memory_recall", "MEMORY_RECALL_FAILED",
                                           "长期记忆召回降级"))
@@ -264,6 +278,7 @@ class ContextBuilder:
                     }
                     for memory in recalled
                 ]
+                _emit_recall_metrics(cid, len(recalled))
         except Exception:
             warnings.append(warn_callback(cid, "memory_recall", "MEMORY_RECALL_FAILED",
                                           "长期记忆召回降级"))
@@ -280,7 +295,15 @@ class ContextBuilder:
         if long_ctx:
             messages.append(SystemMessage(content=f"## 长期记忆\n{long_ctx}"))
         messages.append(HumanMessage(content=message))
-        return messages, warnings, {"knowledge_refs": [], "memory_refs": memory_refs}
+        # 本轮上下文快照（ADR-0017）：短时记忆 = 增量摘要 + 消息窗口（只记 count，
+        # 消息全文在 messages 表）；长时记忆 = memory_refs。供 run 落库观测。
+        snapshot = {
+            "summary": summary,
+            "window": {"count": len(msgs)},
+            "memory_refs": memory_refs,
+            "knowledge_refs": [],
+        }
+        return messages, warnings, {"knowledge_refs": [], "memory_refs": memory_refs}, snapshot
 
     async def _render_prompt(self, params: dict) -> str | None:
         """渲染 CHAT 模板。"""

@@ -21,6 +21,7 @@ from app.ai.rag.semantic_chunker import SemanticChunker
 from app.db.session import AsyncSessionLocal, engine
 from app.models import Document, KnowledgeChunk
 from tests.eval.golden_retrieval import FIXTURE_DOCS
+from tests.eval.regression_cases import REGRESSION_CASES
 
 pytestmark = pytest.mark.live_eval
 
@@ -34,7 +35,7 @@ MAX_STEPS = 4
 # - need_doc：问"完整内容/实现"，需要看全文 → search + get_document
 # - multi_step：对比/多主题，需多次检索 + 看详情 → search×N + get_document
 # 每类 3 个（稳定统计），共 18 个。recall 为主门禁，exact 为参考（多工具场景允许偏差）。
-AGENT_CASES = [
+BASE_AGENT_CASES = [
     # ---- need_search：片段检索即可答 ----
     ("缓存击穿怎么解决？", ["search_knowledge"], "need_search"),
     ("RAG 混合检索是怎么融合的？", ["search_knowledge"], "need_search"),
@@ -60,6 +61,10 @@ AGENT_CASES = [
     ("你是谁？", [], "direct"),
     ("谢谢你的帮助", [], "direct"),
 ]
+
+# 失败沉淀回归集（ADR-0017）：线上 run 评审 accepted 后经 sync 脚本追加进
+# REGRESSION_CASES，自动成为门禁 case。保持 BASE 18 个不动。
+AGENT_CASES = BASE_AGENT_CASES + REGRESSION_CASES
 
 
 def _seq() -> callable:
