@@ -149,11 +149,14 @@ app/
 > 已有 volume 先运行 `./codeaware-py/scripts/ensure_python_db.sh`。
 
 ```bash
+./start.sh                                     # 一键启动：基础服务 + Celery worker + 后端 + 前端 + admin（推荐）
+# 或分步：docker compose up -d（PG/Redis）+ celery worker（上传分块必需）+ uvicorn + vite
 docker compose up -d                          # 从仓库根起 PG/Redis/Ollama
 ./codeaware-py/scripts/ensure_python_db.sh
 docker compose exec ollama ollama pull bge-m3
 (cd codeaware-py && uv sync)                  # 装后端依赖
 (cd codeaware-py && uv run alembic upgrade head)
+(cd codeaware-py && uv run celery -A app.ai.celery_app worker --loglevel=warning)  # 异步分块/记忆抽取必需
 (cd codeaware-py && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000)
 (cd codeaware-py && uv run python scripts/run_tests_safe.py -q)
 (cd codeaware-py && uv run python scripts/run_tests_safe.py --cov=app --cov-report=term-missing -q)

@@ -44,9 +44,26 @@ async def _check_deepseek() -> None:
         response.raise_for_status()
 
 
-async def _bounded(check) -> str:
+async def _check_celery() -> None:
+    """Celery worker 探活（control.ping 广播）。缺 worker → 异步分块/记忆抽取不可用。
+
+    放 to_thread：celery control 是同步客户端，避免阻塞事件循环。
+    ping timeout=1：只要任一 worker pong 即 up（等全部会拖 3s+，超通用 2s 判定）。
+    """
+    from app.ai.celery_app import celery_app
+
+    def _ping() -> bool:
+        replies = celery_app.control.ping(timeout=1)
+        return bool(replies)
+
+    ok = await asyncio.to_thread(_ping)
+    if not ok:
+        raise RuntimeError("no celery worker")
+
+
+async def _bounded(check, timeout: float = _READINESS_TIMEOUT_SECONDS) -> str:
     try:
-        async with asyncio.timeout(_READINESS_TIMEOUT_SECONDS):
+        async with asyncio.timeout(timeout):
             await check()
         return "up"
     except Exception:  # noqa: BLE001 - readiness must return a sanitized aggregate
@@ -61,20 +78,32 @@ async def liveness() -> Result:
 
 @router.get("/ready")
 async def readiness():
-    """Strict PG/Redis/Ollama readiness without exposing dependency errors."""
-    postgres, redis, ollama, deepseek = await asyncio.gather(
+    """Readiness 三态：ready（全 up）/ degraded（主链路 up 但 celery down，异步分块不可用）/ not_ready。
+
+    主链路（PG/Redis/Ollama/DeepSeek）决定同步 Chat/RAG 可用性；celery worker 只影响
+    上传分块/记忆抽取等异步任务，缺失时降级而不 fail 主链路。
+    """
+    postgres, redis, ollama, deepseek, celery = await asyncio.gather(
         _bounded(_check_postgres),
         _bounded(_check_redis),
         _bounded(_check_ollama),
         _bounded(_check_deepseek),
+        # celery 广播需等 worker 应答（多 worker 更慢），单独放宽超时
+        _bounded(_check_celery, timeout=4.0),
     )
-    checks = {"postgres": postgres, "redis": redis, "ollama": ollama, "deepseek": deepseek}
-    ready = all(value == "up" for value in checks.values())
-    payload = Result(
-        code=1 if ready else 0,
-        msg="success" if ready else "not ready",
-        data={"status": "ready" if ready else "not_ready", "checks": checks},
-    )
-    if ready:
-        return payload
-    return JSONResponse(status_code=503, content=payload.model_dump())
+    checks = {
+        "postgres": postgres, "redis": redis, "ollama": ollama,
+        "deepseek": deepseek, "celery": celery,
+    }
+    core_ready = all(checks[k] == "up" for k in ("postgres", "redis", "ollama", "deepseek"))
+    if core_ready and celery == "up":
+        status, code, msg = "ready", 1, "success"
+    elif core_ready:
+        # 异步链路（worker）不可用：主链路仍可用 → degraded，不 fail 同步请求
+        status, code, msg = "degraded", 1, "degraded: celery worker down"
+    else:
+        status, code, msg = "not_ready", 0, "not ready"
+    payload = Result(code=code, msg=msg, data={"status": status, "checks": checks})
+    if not core_ready:
+        return JSONResponse(status_code=503, content=payload.model_dump())
+    return payload

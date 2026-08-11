@@ -5022,7 +5022,7 @@
     },
     "/health/ready": {
       "get": {
-        "description": "Strict PG/Redis/Ollama readiness without exposing dependency errors.",
+        "description": "Readiness 三态：ready（全 up）/ degraded（主链路 up 但 celery down，异步分块不可用）/ not_ready。\n\n主链路（PG/Redis/Ollama/DeepSeek）决定同步 Chat/RAG 可用性；celery worker 只影响\n上传分块/记忆抽取等异步任务，缺失时降级而不 fail 主链路。",
         "operationId": "readiness_health_ready_get",
         "responses": {
           "200": {

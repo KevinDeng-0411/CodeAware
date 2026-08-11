@@ -53,9 +53,14 @@ cd codeaware-py && uv run python scripts/run_tests_safe.py -q          # 全量
 uv run python scripts/run_tests_safe.py tests/test_rag_graph.py -q    # 定向
 uv run python scripts/run_tests_safe.py tests/eval/test_agent_eval.py -m live_eval -q  # Agent 真实评估
 
-# 启动
+# 启动（推荐一键：基础服务 + native Celery worker + 后端 + 前端 + admin 账号）
+./start.sh
+# 手动分步（worker 缺失 → 上传分块/记忆抽取异步任务不执行，chunk_count=0！）
 docker compose up -d postgres redis        # 基础服务
-uv run alembic upgrade head
+cd codeaware-py && uv run alembic upgrade head
+uv run celery -A app.ai.celery_app worker --loglevel=warning   # Celery worker（必需）
 uv run uvicorn app.main:app --port 8000    # 后端（CHAT_MODE=agent 环境变量切 Agent 模式）
 cd frontend && npm run dev                 # 前端
+# 健康检查：/health/ready 三态（ready/degraded/not_ready），checks 含 celery——worker 缺失显示 degraded
+curl http://localhost:8000/health/ready
 ```
