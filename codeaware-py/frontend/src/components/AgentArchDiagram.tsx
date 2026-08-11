@@ -1,14 +1,13 @@
-// AgentArchDiagram - Agent 全链路架构图（纵向主链 + waku 四原则）
-// ① 布局：手写坐标（纵向主链 + 每层横向分支），语义重量决定尺寸，零遮挡
+// AgentArchDiagram - Agent 全链路架构图（纵向主链 + 分支下拉折叠 + waku 四原则）
+// ① 布局：手写坐标，语义重量决定尺寸；分支（记忆/历史、5 工具、检索栈）可下拉折叠，
+//    折叠后只留紧凑主链 → 下方 llm/sse/agent_runs 全可见，无纵向遮挡
 // ② 数据流：SSE 事件统一驱动（archMap 映射）
 // ③ 视觉编码：单强调色(teal) + 灰度 + 激活实线/未激活虚线
 // ④ 动画：稳定强调色 + transition（叙事非装饰）
-// 关键：SVG 用固定像素尺寸（不缩放）→ 字号恒定清晰，容器 overflow 滚动。
+// SVG 固定像素（不缩放）→ 字号恒定清晰，容器 overflow 滚动。
+import { useState } from "react";
 import { ARCH_NODES } from "./archMap";
 
-// ---------- 手写坐标布局（纵向主链） ----------
-// 主链节点（宽大、字大）：input→guardrail→coordinator→context→toolkit→llm→sse→agent_runs
-// 分支节点（横向展开）：记忆/历史（context 旁）、5 工具（toolkit 下）、检索栈（search 下）
 interface Rect {
   x: number;
   y: number;
@@ -18,30 +17,26 @@ interface Rect {
 
 const MAIN_W = 236;
 const MAIN_H = 58;
-const MAIN_X = 96; // 主链 x（左对齐，工具/检索栈与其对齐）
+const MAIN_X = 96;
 const BRANCH_W = 150;
 const BRANCH_H = 50;
 
-const POS: Record<string, Rect> = {
-  // 主链（纵向，y 每层 +86）
-  input: { x: MAIN_X, y: 12, w: MAIN_W, h: MAIN_H },
-  guardrail: { x: MAIN_X, y: 98, w: MAIN_W, h: MAIN_H },
-  coordinator: { x: MAIN_X, y: 184, w: MAIN_W, h: MAIN_H },
-  context: { x: MAIN_X, y: 270, w: MAIN_W, h: MAIN_H },
-  toolkit: { x: MAIN_X, y: 356, w: MAIN_W, h: MAIN_H },
-  llm: { x: MAIN_X, y: 640, w: MAIN_W, h: MAIN_H },
-  sse: { x: MAIN_X, y: 726, w: MAIN_W, h: MAIN_H },
-  agent_runs: { x: MAIN_X, y: 812, w: MAIN_W, h: MAIN_H },
-  // context 分支（右侧横排）
+// 主链 y（展开/折叠两套，折叠更紧凑）
+const MAIN_Y = {
+  unfolded: [12, 98, 184, 270, 356, 640, 726, 812],
+  folded: [12, 82, 152, 222, 292, 362, 432, 502],
+};
+const MAIN_IDS = ["input", "guardrail", "coordinator", "context", "toolkit", "llm", "sse", "agent_runs"];
+
+// 分支（仅展开时渲染）
+const BRANCH_POS: Record<string, Rect> = {
   memory: { x: 380, y: 282, w: 170, h: 44 },
   history: { x: 580, y: 282, w: 170, h: 44 },
-  // 工具（toolkit 下横排 5 个）
   "tool:search_knowledge": { x: 24, y: 442, w: BRANCH_W, h: BRANCH_H },
   "tool:get_document": { x: 194, y: 442, w: BRANCH_W, h: BRANCH_H },
   "tool:list_documents": { x: 364, y: 442, w: BRANCH_W, h: BRANCH_H },
   "tool:calculate": { x: 534, y: 442, w: BRANCH_W, h: BRANCH_H },
   "tool:get_current_time": { x: 704, y: 442, w: BRANCH_W, h: BRANCH_H },
-  // 检索栈（search 下横排 5 个）
   rag: { x: 24, y: 532, w: BRANCH_W, h: BRANCH_H },
   bm25: { x: 194, y: 532, w: BRANCH_W, h: BRANCH_H },
   vector: { x: 364, y: 532, w: BRANCH_W, h: BRANCH_H },
@@ -49,11 +44,10 @@ const POS: Record<string, Rect> = {
   reranker: { x: 704, y: 532, w: BRANCH_W, h: BRANCH_H },
 };
 
-// SVG 固定像素（不缩放 → 字恒定清晰），容器 overflow-auto
 const SVG_W = 900;
-const SVG_H = 890;
+const SVG_H_UNFOLDED = 890;
+const SVG_H_FOLDED = 570;
 
-// 节点标签（覆盖 ARCH_NODES 的 label，主链用中文+英文）
 const LABELS: Record<string, string> = {
   input: "用户问题",
   guardrail: "Guardrail",
@@ -77,15 +71,10 @@ const LABELS: Record<string, string> = {
   reranker: "Reranker",
 };
 
-// ---------- 边（线型编码：激活 teal 实线 / 未激活灰虚线） ----------
-// 工具→LLM 用一条"工具结果返回"聚合边（右侧绕行，避免横穿检索栈层）→ 零遮挡
-const EDGES: [string, string][] = [
-  ["input", "guardrail"],
-  ["guardrail", "coordinator"],
-  ["coordinator", "context"],
+// 分支边（仅展开）
+const BRANCH_EDGES: [string, string][] = [
   ["context", "memory"],
   ["context", "history"],
-  ["context", "toolkit"],
   ["toolkit", "tool:search_knowledge"],
   ["toolkit", "tool:get_document"],
   ["toolkit", "tool:list_documents"],
@@ -98,6 +87,14 @@ const EDGES: [string, string][] = [
   ["vector", "rrf"],
   ["rrf", "reranker"],
   ["reranker", "llm"],
+];
+// 主链纵向边（始终渲染；折叠时 toolkit→llm 直连）
+const MAIN_EDGES: [string, string][] = [
+  ["input", "guardrail"],
+  ["guardrail", "coordinator"],
+  ["coordinator", "context"],
+  ["context", "toolkit"],
+  ["toolkit", "llm"],
   ["llm", "sse"],
   ["sse", "agent_runs"],
 ];
@@ -108,74 +105,52 @@ interface AgentArchDiagramProps {
   error?: boolean;
 }
 
-// 通用正交边：同层（y 近）画水平；跨层先下再横再下，拐角取下方空隙（避免穿检索栈层）
-function EdgeLine({ from, to, lit }: { from: string; to: string; lit: boolean }) {
-  const a = POS[from];
-  const b = POS[to];
-  if (!a || !b) return null;
+function edgePath(a: Rect, b: Rect): string {
   const x1 = a.x + a.w / 2;
   const y1 = a.y + a.h;
   const x2 = b.x + b.w / 2;
   const y2 = b.y;
-  // 水平相邻（同层：context→memory / memory→history）
   if (Math.abs(y1 - y2) < 4) {
-    const left = Math.min(x1, x2);
-    const right = Math.max(x1, x2);
-    return (
-      <path
-        d={`M ${left} ${y1} H ${right}`}
-        fill="none"
-        strokeWidth={lit ? 2 : 1.2}
-        strokeDasharray={lit ? undefined : "4 4"}
-        markerEnd={lit ? "url(#arch-arrow)" : undefined}
-        className={lit ? "stroke-teal/70" : "stroke-line"}
-      />
-    );
+    return `M ${Math.min(x1, x2)} ${y1} H ${Math.max(x1, x2)}`;
   }
-  // 跨层：拐角取两节点中点偏下（reranker→llm 落在检索栈下方空隙）
   const midY = Math.max(y1 + 8, (y1 + y2) / 2 + 8);
-  return (
-    <path
-      d={`M ${x1} ${y1} V ${midY} H ${x2} V ${y2}`}
-      fill="none"
-      strokeWidth={lit ? 2 : 1.2}
-      strokeDasharray={lit ? undefined : "4 4"}
-      markerEnd={lit ? "url(#arch-arrow)" : undefined}
-      className={lit ? "stroke-teal/70" : "stroke-line"}
-    />
-  );
-}
-
-// 工具结果返回聚合边：从工具行右端向下绕行到 LLM（不穿检索栈）
-function ToolReturnEdge({ lit }: { lit: boolean }) {
-  const startX = POS["tool:get_current_time"].x + POS["tool:get_current_time"].w; // 854
-  const topY = POS["tool:get_current_time"].y + POS["tool:get_current_time"].h; // 492
-  const llmLeft = POS.llm.x; // 96
-  const llmTop = POS.llm.y; // 640
-  const midY = llmTop - 26; // 检索栈(532-582)下方的空隙
-  return (
-    <path
-      d={`M ${startX} ${topY} V ${midY} H ${llmLeft - 12} V ${llmTop}`}
-      fill="none"
-      strokeWidth={lit ? 2 : 1.2}
-      strokeDasharray={lit ? undefined : "4 4"}
-      markerEnd={lit ? "url(#arch-arrow)" : undefined}
-      className={lit ? "stroke-teal/70" : "stroke-line"}
-    />
-  );
+  return `M ${x1} ${y1} V ${midY} H ${x2} V ${y2}`;
 }
 
 export default function AgentArchDiagram({ lit, current, error }: AgentArchDiagramProps) {
+  const [showBranches, setShowBranches] = useState(true);
   const isError = error;
+  const svgH = showBranches ? SVG_H_UNFOLDED : SVG_H_FOLDED;
+  const mainY = MAIN_Y[showBranches ? "unfolded" : "folded"];
+
+  const posFor = (id: string): Rect | undefined => {
+    if (MAIN_IDS.includes(id)) {
+      return { x: MAIN_X, y: mainY[MAIN_IDS.indexOf(id)], w: MAIN_W, h: MAIN_H };
+    }
+    return showBranches ? BRANCH_POS[id] : undefined;
+  };
+
+  const allEdges = showBranches ? [...MAIN_EDGES, ...BRANCH_EDGES] : MAIN_EDGES;
+  // 折叠时 toolkit→llm 直连，去掉 reranker→llm/聚合边依赖
+  const toolLit = ["tool:search_knowledge", "tool:get_document", "tool:list_documents", "tool:calculate", "tool:get_current_time"].some((t) => lit.has(t));
+
   return (
     <div className="flex-1 min-w-0 flex flex-col">
-      {/* 面板头 + 图例 */}
-      <div className="px-4 py-2.5 border-b border-line flex items-center gap-4 flex-wrap">
+      {/* 面板头 + 图例（h-12 与 Chat/侧栏 header 对齐）+ 分支折叠 */}
+      <div className="h-12 px-4 border-b border-line flex items-center gap-3">
         <div className="font-mono text-xs font-semibold tracking-techy text-ink">Agent 运行</div>
         <div className="font-mono text-2xs text-mute tracking-techy">
           {lit.size === 0 ? "发送问题后高亮实际路径" : `路径 ${lit.size} 模块`}
         </div>
-        <div className="ml-auto flex items-center gap-3 font-mono text-[10px] text-mute">
+        <button
+          type="button"
+          onClick={() => setShowBranches((v) => !v)}
+          className="ml-auto font-mono text-[10px] text-mute hover:text-ink border border-line rounded px-2 py-0.5 transition-colors"
+          title={showBranches ? "收起分支，只看主链" : "展开工具/检索栈分支"}
+        >
+          {showBranches ? "收起分支 ▾" : "展开分支 ▸"}
+        </button>
+        <div className="flex items-center gap-3 font-mono text-[10px] text-mute">
           <span className="flex items-center gap-1">
             <span className="w-3 h-0 border-t-2 border-teal" /> 已走
           </span>
@@ -192,32 +167,55 @@ export default function AgentArchDiagram({ lit, current, error }: AgentArchDiagr
       </div>
       {/* 大图区：固定像素 SVG（字不缩放），overflow 滚动 */}
       <div className="flex-1 overflow-auto p-4">
-        <div className="w-[900px]">
-          <svg width={SVG_W} height={SVG_H} role="img" aria-label="Agent 全链路架构图">
+        <div style={{ width: SVG_W }}>
+          <svg width={SVG_W} height={svgH} role="img" aria-label="Agent 全链路架构图">
             <defs>
               <marker id="arch-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" className="fill-teal/70" />
               </marker>
             </defs>
-            {/* 层标签（语义分组） */}
-            <text x={24} y={436} className="fill-mute font-mono text-[10px]">Agent 工具</text>
-            <text x={24} y={526} className="fill-mute font-mono text-[10px]">检索栈</text>
+            {showBranches && (
+              <>
+                <text x={24} y={436} className="fill-mute font-mono text-[10px]">Agent 工具</text>
+                <text x={24} y={526} className="fill-mute font-mono text-[10px]">检索栈</text>
+              </>
+            )}
             {/* 边 */}
-            {EDGES.map(([from, to], i) => (
-              <EdgeLine key={i} from={from} to={to} lit={lit.has(from) && lit.has(to)} />
-            ))}
-            {/* 工具结果返回聚合边（lit = 任意工具已用） */}
-            <ToolReturnEdge
-              lit={["tool:search_knowledge", "tool:get_document", "tool:list_documents", "tool:calculate", "tool:get_current_time"].some((t) => lit.has(t))}
-            />
+            {allEdges.map(([from, to], i) => {
+              const a = posFor(from);
+              const b = posFor(to);
+              if (!a || !b) return null;
+              const on = lit.has(from) && lit.has(to);
+              return (
+                <path
+                  key={i}
+                  d={edgePath(a, b)}
+                  fill="none"
+                  strokeWidth={on ? 2 : 1.2}
+                  strokeDasharray={on ? undefined : "4 4"}
+                  markerEnd={on ? "url(#arch-arrow)" : undefined}
+                  className={on ? "stroke-teal/70" : "stroke-line"}
+                />
+              );
+            })}
+            {/* 展开态：工具结果返回聚合边（右侧绕行，不穿检索栈） */}
+            {showBranches && (
+              <path
+                d={`M ${BRANCH_POS["tool:get_current_time"].x + BRANCH_POS["tool:get_current_time"].w} ${BRANCH_POS["tool:get_current_time"].y + BRANCH_POS["tool:get_current_time"].h} V ${MAIN_Y.unfolded[5] - 26} H ${MAIN_X - 12} V ${MAIN_Y.unfolded[5]}`}
+                fill="none"
+                strokeWidth={toolLit ? 2 : 1.2}
+                strokeDasharray={toolLit ? undefined : "4 4"}
+                markerEnd={toolLit ? "url(#arch-arrow)" : undefined}
+                className={toolLit ? "stroke-teal/70" : "stroke-line"}
+              />
+            )}
             {/* 节点 */}
-            {ARCH_NODES.map((n) => {
-              const p = POS[n.id];
-              if (!p) return null;
+            {ARCH_NODES.filter((n) => posFor(n.id)).map((n) => {
+              const p = posFor(n.id)!;
               const isLit = lit.has(n.id);
               const isCurrent = n.id === current;
               const isErr = isError && (n.id === "coordinator" || n.id === "llm");
-              const main = p.w >= 200; // 主链大节点
+              const main = MAIN_IDS.includes(n.id);
               const rectClass = [
                 "fill-paper transition-colors duration-300",
                 isErr

@@ -324,7 +324,7 @@ export default function ChatPage() {
       <ToastBar err={toast.err} onClose={toast.clear} />
       {/* 会话侧栏 */}
       <div className="w-56 shrink-0 border-r border-line bg-panel flex flex-col">
-        <div className="p-3 border-b border-line">
+        <div className="h-12 px-3 border-b border-line flex items-center">
           <Button variant="ghost" onClick={newChat} className="w-full justify-center">
             <Plus className="w-4 h-4" /> 新对话
           </Button>
@@ -381,7 +381,7 @@ export default function ChatPage() {
           chatMode === "agent" ? "w-[26rem] shrink-0" : "flex-1"
         }`}
       >
-        <div className="px-5 py-3 border-b border-line flex items-center gap-2 bg-panel">
+        <div className="h-12 px-5 border-b border-line flex items-center gap-2 bg-panel">
           <MessageSquare className="w-4 h-4 text-oxblood" />
           <span className="font-mono text-sm font-semibold tracking-techy">CHAT</span>
           <span className="font-mono text-2xs text-mute tracking-techy">
