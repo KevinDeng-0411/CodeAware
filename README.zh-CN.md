@@ -30,10 +30,14 @@ AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代�
 | 🧠 **思考过程流式** | DeepSeek reasoning_content 与回答分离推送（10 事件 typed SSE），可见"模型如何推理" |
 | 🇨🇳 **中文检索优化** | jieba 分词让中文 BM25 从不可用变可用（中文精确 R@5: 0.25 → **1.000**） |
 | 🔀 **智能路由 + 自我纠错** | LangGraph 编排：常识问题跳过检索（省延迟）；检索不理想自动改写重试（ADR-0015） |
-| 🤖 **Agent 模式** | `CHAT_MODE=agent` 开启 ReAct 工具循环：模型自主选工具（知识检索/文档/计算/时间），多步推理 + 工具轨迹可视化 + 收敛感知停止（eval：avg_steps 2.28、闭环率 1.0）——ADR-0016 |
+| 🤖 **Agent 模式** | 前端可切换（`RAG`/`Agent`）的 ReAct 工具循环：模型自主选工具（知识检索/文档/计算/时间），多步推理 + 收敛感知停止（eval：avg_steps 2.28、闭环率 1.0）——ADR-0016 |
+| 🗺️ **架构图（Agent 模式）** | 全链路架构图（守卫→编排→上下文→工具→检索栈→LLM→SSE→agent_runs），回合中**使用部分实时高亮**；纵向主链 + 可折叠分支 + 固定像素 SVG |
+| 📊 **Agent Runs 页** | 每轮 Agent 回合持久化为结构化 trace + 上下文快照 → 回放（时间线/流程视图）+ 评审（失败沉淀进 eval 回归集）——ADR-0017 |
+| 🛡️ **请求边界 Guardrail** | `ChatRequest` 注入检测（fail-closed 422），双模式生效；刻意不在工具结果层做（知识库是策展内容） |
 | 👥 **团队化** | JWT 登录、会话按用户隔离、知识库/记忆全员共享（实验室场景） |
 | 📚 **文档管理** | 列表 / 详情（分块可视化）/ 软删除 / 替换更新（ADR-0013） |
 | 🧩 **长期记忆** | 对话事实自动抽取 + pgvector 向量召回，跨会话记住团队上下文 |
+| 🩺 **就绪健康检查** | `/health/ready` 三态（ready / degraded / not_ready），含 **Celery worker 探活**——提前发现异步分块不可用 |
 
 ---
 
@@ -50,6 +54,18 @@ AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代�
 ![登录页](./docs/screenshots/login.png)
 
 *登录：JWT 团队认证*
+
+![Agent 架构图高亮](./docs/screenshots/agent-arch.png)
+
+*Agent 模式：全链路架构图实时高亮——检索问题点亮检索栈；计算问题检索栈保持暗*
+
+![Agent Runs 回放与评审](./docs/screenshots/agent-runs.png)
+
+*Agent Runs 页：运行列表 + 统计 + 回放（时间线/流程视图）+ 失败评审（accepted 进 eval 回归集）*
+
+![RAG/Agent 模式切换](./docs/screenshots/mode-switch.png)
+
+*顶部 header 分段控制切换 RAG（确定性状态机）与 Agent（ReAct 工具循环）*
 
 ---
 
@@ -84,26 +100,26 @@ docker compose up -d        # PG(:5433) + Redis(:6380) + Kafka(:9093) + Celery W
 # Ollama 本地运行 (macOS Metal GPU): brew install ollama && ollama pull bge-m3
 ```
 
-### 第 3 步：一键启动（迁移 + admin 引导 + 后端 + 前端）
+### 第 3 步：一键启动（迁移 + Celery worker + admin + 后端 + 前端）
 
 ```bash
-bash codeaware-py/scripts/start.sh
+./start.sh
 ```
 
-首次运行会引导创建 admin 账号。启动后访问：
+启动基础服务、执行迁移、拉起 **native Celery worker**（异步分块 / 记忆抽取——缺它上传文档会一直 `chunk_count=0`）、种子 `admin/admin123` 账号，再启动后端 + 前端。幂等（可重复执行）。启动后访问：
 
 ```text
-前端:     http://localhost:5173
+前端:     http://localhost:5173          (admin / admin123)
 OpenAPI:  http://localhost:8000/docs
-健康检查: http://localhost:8000/api/ai/health
+健康检查: http://localhost:8000/health/ready   # ready / degraded / not_ready（含 celery 探活）
 ```
 
 ### 手动启动（分步）
 
 ```bash
-docker compose up -d
+docker compose up -d postgres redis
 (cd codeaware-py && uv sync && uv run alembic upgrade head)
-(cd codeaware-py && uv run python -m scripts.create_admin)   # 首次
+(cd codeaware-py && uv run celery -A app.ai.celery_app worker --loglevel=warning)  # 异步分块必需
 (cd codeaware-py && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000)
 (cd codeaware-py/frontend && npm ci && npm run dev)
 ```
@@ -111,8 +127,8 @@ docker compose up -d
 ### 停止
 
 ```bash
-bash codeaware-py/scripts/stop.sh      # 停后端+前端, docker 保留
-docker compose down                    # 全停（数据在 volume 中保留）
+kill $(cat .run/*.pid)        # 停 worker + 后端 + 前端（docker 保留）
+docker compose down           # 全停（数据在 volume 中保留）
 ```
 
 ---
@@ -278,7 +294,7 @@ flowchart LR
 - **双运行时可回退**——LangGraph 检索增强（`RAG_RUNTIME=graph`）异常可一键回退原路径（`service`）
 - **Rerank 是可回退增强**——`reranker_enabled=False` 一键回退纯 RRF
 
-详细设计：Chat 全链路时序、数据模型（9 表 ER）、RAG 流水线见 [docs/roadmap/current-release/README.md](docs/roadmap/current-release/README.md)。
+详细设计：Chat 全链路时序、数据模型（10 表 ER）、RAG 流水线见 [docs/roadmap/current-release/README.md](docs/roadmap/current-release/README.md)。
 ## typed SSE 示例（10 事件协议）
 
 新会话的 `conversation_id` 由服务端创建并在 `chat.started` 中返回：
@@ -337,13 +353,13 @@ data: {"protocol_version":1,...,"sequence":N}
 
 | 指标 | 数值 |
 |---|---|
-| 后端测试 | **315 passed**, 0 failed |
-| 前端测试 | **43 passed** |
-| API 端点 | 32 个 |
-| 数据表 | 9 张 |
-| ADR | 16 篇 (0001-0016) |
-| Alembic head | 0011 |
-| 完成阶段 | C1-C6 + 团队化 A/B/C + 文档管理 + 异步任务队列 + Kafka 事件流 |
+| 后端测试 | **352 passed**, 0 failed |
+| 前端测试 | **61 passed** |
+| API 端点 | 37 个 |
+| 数据表 | 10 张 |
+| ADR | 17 篇 (0001-0017) |
+| Alembic head | 0012 |
+| 完成阶段 | C1-C6 + 团队化 A/B/C + 文档管理 + 异步任务队列 + Kafka 事件流 + **Agent 模式（前端切换）+ LLMOps 闭环（trace/回放/评审/guardrail）** |
 
 **检索评估摘要**（真实 bge-m3，60 条 golden）：
 
@@ -383,7 +399,7 @@ data: {"protocol_version":1,...,"sequence":N}
 | PDF 解析 | pdfminer.six（字号标题检测） | unstructured.partition.pdf（拖 torch）；pdfplumber（表格提取，暂缓——暂无表格密集型文档） |
 | Reranker | ONNX bge-reranker-v2-m3（ADR-0009 重新评估落地） | torch CrossEncoder（依赖过重） |
 | 意图识别 | 不做（90% 知识问题） | 加分类引入漏检风险 |
-| LangGraph | 检索层智能路由 + 自我纠错（ADR-0015） | 完整 Agent 工具循环（无需求触发） |
+| LangGraph | 检索层智能路由 + 自我纠错（ADR-0015） | 编排 Agent 循环（ReAct 保持手写 async generator，ADR-0016） |
 | 任务队列 | Celery + Redis | 异步文档解析/记忆抽取, Flower 监控 |
 | 事件流 | Kafka (Confluent) | 审计日志/检索指标/异常事件 |
 | Refresh token | 不要（access 7 天） | 实验室不需要 refresh 轮换 |
@@ -403,10 +419,11 @@ data: {"protocol_version":1,...,"sequence":N}
 | PDF 表格压平为纯文本流（无行列结构） | pdfplumber `extract_tables()` → Markdown 表格序列化（待表格密集型文档后引入） |
 | fail-closed disposable 测试栈 | 裸 pytest |
 | 单 worker local-first | 多 worker / K8s |
-| Celery 异步任务队列 | Agent 工具循环 |
+| Celery 异步任务队列 | 外部动作工具（sandbox / Git / MCP） |
 | Kafka 事件流 (审计/指标) | Grafana / Loki 面板 |
 | Flower 任务监控面板 | — |
-| 确定性 Chat 状态机 | Agent 工具循环 |
+| 确定性 Chat 状态机 **+ 前端可切换 Agent 工具循环**（ADR-0016） | 外部动作工具 |
+| Agent run trace + 回放 + 失败沉淀进 eval（ADR-0017） | Chat 页实时高亮（P2，暂缓——事件源无关架构已预留） |
 | 答案缓存（仅同步端点） | 流式端点答案缓存 |
 
 ## 设计与实际差异
@@ -437,7 +454,7 @@ data: {"protocol_version":1,...,"sequence":N}
 | [docs/roadmap/部署上线指南.md](docs/roadmap/部署上线指南.md) | 部署 (局域网 + 云) |
 | [docs/roadmap/chat-to-agent/personal/README.md](docs/roadmap/chat-to-agent/personal/README.md) | Agent 路线（锁定） |
 | [docs/optimization/](docs/optimization/README.md) | 检索优化评估（jieba/top_k/LangGraph/RAGAS） |
-| [docs/decisions/adr/](docs/decisions/adr/) | 16 篇架构决策 |
+| [docs/decisions/adr/](docs/decisions/adr/) | 17 篇架构决策 (0001-0017) |
 | [docs/interview/面试准备指南.md](docs/interview/面试准备指南.md) | 面试深挖 |
 | [docs/interview/面试速通版.md](docs/interview/面试速通版.md) | 面试速通 |
 | [docs/interview/项目简历介绍.md](docs/interview/项目简历介绍.md) | 简历粘贴 |

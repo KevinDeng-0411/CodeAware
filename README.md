@@ -30,10 +30,14 @@ The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybr
 | 🧠 **Streamed chain-of-thought** | DeepSeek `reasoning_content` streamed separately from the answer (10-event typed SSE) — the model's reasoning is visible |
 | 🇨🇳 **Chinese retrieval optimization** | jieba segmentation makes Chinese BM25 usable (exact Chinese R@5: 0.25 → **1.000**) |
 | 🔀 **Smart routing + self-correction** | LangGraph orchestration: common-sense questions skip retrieval (saves latency); weak retrieval triggers query rewriting & retry (ADR-0015) |
-| 🤖 **Agent mode** | `CHAT_MODE=agent` enables ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning with visible tool trace, convergence-aware stop (eval: avg_steps 2.28, closure 1.0) — ADR-0016 |
+| 🤖 **Agent mode** | Frontend switchable (`RAG`/`Agent`); ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning, convergence-aware stop (eval: avg_steps 2.28, closure 1.0) — ADR-0016 |
+| 🗺️ **Architecture diagram (agent)** | Live full-chain map (guardrail → orchestration → context → tools → retrieval stack → LLM → SSE → `agent_runs`) with **used-parts highlighting** during a turn; vertical main-line layout, collapsible branches, fixed-pixel SVG |
+| 📊 **Agent Runs page** | Every agent turn persisted as structured trace + context snapshot → replay (timeline / flow view) + review workflow (failures sink into the eval regression set) — ADR-0017 |
+| 🛡️ **Request-boundary guardrail** | Prompt-injection detection at `ChatRequest` (fail-closed 422), both modes; deliberately *not* on tool results (KB is curated content) |
 | 👥 **Team-ready** | JWT auth, per-user conversation isolation, shared knowledge base & memory (lab scenario) |
 | 📚 **Document management** | List / detail (chunk visualization) / soft delete / replace-update (ADR-0013) |
 | 🧩 **Long-term memory** | Facts auto-extracted from conversations + pgvector recall — team context persists across sessions |
+| 🩺 **Readiness health** | `/health/ready` three-state (ready / degraded / not_ready) incl. **Celery worker probe** — catches missing async chunking early |
 
 ---
 
@@ -50,6 +54,18 @@ The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybr
 ![Login page](./docs/screenshots/login.png)
 
 *Login: JWT team authentication*
+
+![Agent architecture diagram highlighting](./docs/screenshots/agent-arch.png)
+
+*Agent mode: live full-chain architecture diagram — the modules a turn actually used light up (search question → retrieval stack lit; calc question → retrieval stack stays dim)*
+
+![Agent Runs replay & review](./docs/screenshots/agent-runs.png)
+
+*Agent Runs page: run list + statistics + replay timeline / flow view + failure review (accepted runs sink into the eval regression set)*
+
+![RAG / Agent mode switch](./docs/screenshots/mode-switch.png)
+
+*Header segmented control switching between RAG (deterministic state machine) and Agent (ReAct tool loop)*
 
 ---
 
@@ -84,26 +100,26 @@ docker compose up -d        # PG(:5433) + Redis(:6380) + Kafka(:9093) + Celery W
 # Ollama runs natively (macOS Metal GPU): brew install ollama && ollama pull bge-m3
 ```
 
-### Step 3: One-command startup (migrations + admin bootstrap + backend + frontend)
+### Step 3: One-command startup (migrations + Celery worker + admin + backend + frontend)
 
 ```bash
-bash codeaware-py/scripts/start.sh
+./start.sh
 ```
 
-The first run guides you through creating an admin account. Then visit:
+Starts base services, runs migrations, boots a **native Celery worker** (async chunking / memory extraction — missing it makes uploaded docs keep `chunk_count=0`), seeds an `admin/admin123` account, then starts backend + frontend. Idempotent (re-run is safe). Then visit:
 
 ```text
-Frontend:  http://localhost:5173
+Frontend:  http://localhost:5173          (admin / admin123)
 OpenAPI:   http://localhost:8000/docs
-Health:    http://localhost:8000/api/ai/health
+Health:    http://localhost:8000/health/ready   # ready / degraded / not_ready (incl. celery probe)
 ```
 
 ### Manual startup (step by step)
 
 ```bash
-docker compose up -d
+docker compose up -d postgres redis
 (cd codeaware-py && uv sync && uv run alembic upgrade head)
-(cd codeaware-py && uv run python -m scripts.create_admin)   # first time
+(cd codeaware-py && uv run celery -A app.ai.celery_app worker --loglevel=warning)  # required for async chunking
 (cd codeaware-py && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000)
 (cd codeaware-py/frontend && npm ci && npm run dev)
 ```
@@ -111,8 +127,8 @@ docker compose up -d
 ### Stop
 
 ```bash
-bash codeaware-py/scripts/stop.sh      # stop backend + frontend, keep docker
-docker compose down                    # stop everything (data persists in volumes)
+kill $(cat .run/*.pid)        # stop worker + backend + frontend (keep docker)
+docker compose down           # stop everything (data persists in volumes)
 ```
 
 ---
@@ -244,6 +260,10 @@ flowchart TD
     J --> K[chat.completed]
 ```
 
+**Live architecture display** (agent mode): the Chat page renders a static full-chain map and lights up the modules each turn actually uses — driven by the same SSE events (`tool.call` → the tool + retrieval stack, `context.references` → memory recall, `completed` → `sse`/`agent_runs`). Vertical main-line layout, collapsible branches, fixed-pixel SVG (readable text).
+
+![Agent architecture diagram](./docs/screenshots/agent-arch.png)
+
 ### 5. System Context / Boundary
 
 ```mermaid
@@ -274,7 +294,7 @@ flowchart LR
 
 - **PostgreSQL is the source of truth; Redis is a disposable cache** — on Redis failure the system falls back to PG automatically, no feature degradation
 - **No DB transaction is held while waiting on the model** — the connection pool is never blocked for long
-- **Typed SSE with explicit semantics** — 8 event types with protocol version and strictly increasing sequence; the sync endpoint drains the same event stream — a single state machine
+- **Typed SSE with explicit semantics** — 10 event types with protocol version and strictly increasing sequence; the sync endpoint drains the same event stream — a single state machine
 - **Dual runtime with rollback** — LangGraph retrieval enhancement (`RAG_RUNTIME=graph`) can be reverted to the original path (`service`) with one env change
 - **Rerank is a reversible enhancement** — `reranker_enabled=False` reverts to pure RRF
 
@@ -339,13 +359,13 @@ data: {"protocol_version":1,...,"sequence":N}
 
 | Metric | Value |
 |---|---|
-| Backend tests | **315 passed**, 0 failed (async tasks + Kafka + LangGraph) |
-| Frontend tests | **43 passed** |
-| API endpoints | 32 |
-| Tables | 9 |
-| ADRs | 16 (0001-0016) |
-| Alembic head | 0011 |
-| Delivered | C1-C6 + team A/B/C + document management + async task queue + Kafka event streaming |
+| Backend tests | **352 passed**, 0 failed (async tasks + Kafka + LangGraph + Agent LLMOps) |
+| Frontend tests | **61 passed** |
+| API endpoints | 37 |
+| Tables | 10 |
+| ADRs | 17 (0001-0017) |
+| Alembic head | 0012 |
+| Delivered | C1-C6 + team A/B/C + document management + async task queue + Kafka event streaming + **Agent mode (frontend switch) + LLMOps closed loop (trace / replay / review / guardrail)** |
 
 **Retrieval evaluation summary** (real bge-m3, 60 golden cases):
 
@@ -385,7 +405,7 @@ Running bare `pytest` is forbidden for the backend — a safe runner creates dis
 | PDF parsing | pdfminer.six (font-size heading detection) | unstructured.partition.pdf (pulls in torch); pdfplumber (table extraction, deferred — no table-heavy docs yet) |
 | Reranker | ONNX bge-reranker-v2-m3 (ADR-0009 re-evaluated) | torch CrossEncoder (heavy dependency) |
 | Intent classification | not built (90% knowledge questions) | classifier risks missed retrieval |
-| LangGraph | retrieval-layer routing + self-correction (ADR-0015) | full Agent tool loop (no demand) |
+| LangGraph | retrieval-layer routing + self-correction (ADR-0015) | orchestrating the Agent loop (ReAct stays a hand-written async generator, ADR-0016) |
 | Refresh token | none (7-day access) | lab doesn't need rotation |
 | Concurrency guard | in-process set[str] | PG advisory lock (when multi-worker) |
 | Task queue | Celery + Redis | Kafka (event stream, not task queue) |
@@ -405,10 +425,11 @@ Running bare `pytest` is forbidden for the backend — a safe runner creates dis
 | PDF tables flattened into plain text (no row/column structure) | pdfplumber `extract_tables()` → Markdown table serialization (deferred until table-heavy docs exist) |
 | fail-closed disposable test stack | bare pytest |
 | single-worker local-first | multi-worker / K8s |
-| Celery async task queue | Agent tool loop |
+| Celery async task queue | external-action tools (sandbox / Git / MCP) |
 | Kafka event streaming (audit/metrics) | Grafana / Loki dashboard |
 | Flower task monitoring | — |
-| deterministic Chat state machine | Agent tool loop |
+| deterministic Chat state machine **+ frontend-switchable Agent tool loop** (ADR-0016) | external-action tools |
+| Agent run trace + replay + failure→eval sink (ADR-0017) | live Chat-page real-time highlight (P2, deferred — event-source-agnostic design already reserves it) |
 | answer cache (sync endpoint only) | answer cache on streaming endpoint |
 
 ## Design vs Implementation Notes
@@ -439,7 +460,7 @@ Points where the design diverged from the final implementation, with the trade-o
 | [docs/roadmap/部署上线指南.md](docs/roadmap/部署上线指南.md) | deployment (LAN + cloud) |
 | [docs/roadmap/chat-to-agent/personal/README.md](docs/roadmap/chat-to-agent/personal/README.md) | Agent roadmap (locked) |
 | [docs/optimization/](docs/optimization/README.md) | retrieval optimization evals (jieba/top_k/LangGraph/RAGAS) |
-| [docs/decisions/adr/](docs/decisions/adr/) | 15 architecture decision records |
+| [docs/decisions/adr/](docs/decisions/adr/) | 17 architecture decision records (0001-0017) |
 | [docs/interview/面试准备指南.md](docs/interview/面试准备指南.md) | interview deep-dive |
 | [docs/interview/面试速通版.md](docs/interview/面试速通版.md) | interview speedrun |
 | [docs/interview/项目简历介绍.md](docs/interview/项目简历介绍.md) | resume blurb |
