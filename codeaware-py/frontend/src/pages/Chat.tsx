@@ -12,6 +12,16 @@ import type { ChatMessage, ConversationItem } from "../api/types";
 import { Button, EmptyState, SignalTrace, ToastBar, useToast } from "../components/ui";
 import Markdown from "../components/Markdown";
 import ToolTrace, { type ToolActivity } from "../components/ToolTrace";
+import AgentArchDiagram from "../components/AgentArchDiagram";
+import {
+  archCurrentOnModel,
+  archCurrentOnToolCall,
+  archOnCompleted,
+  archOnModel,
+  archOnReferences,
+  archOnStarted,
+  archOnToolCall,
+} from "../components/archMap";
 import { useAgentOps } from "../store/agentOps";
 import {
   cancelledTurnMessages,
@@ -33,6 +43,12 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   // ADR-0016：RAG/Agent 模式切换（按请求传 mode，覆盖后端 CHAT_MODE）
   const [chatMode, setChatMode] = useState<"rag" | "agent">("rag");
+  // 架构图高亮（agent 模式）：lit=已用模块，current=当前执行模块，error=本轮失败
+  const [archHighlight, setArchHighlight] = useState<{
+    lit: Set<string>;
+    current: string | null;
+    error: boolean;
+  }>({ lit: new Set(), current: null, error: false });
   const [streaming, setStreaming] = useState(false);
   const [loadingConv, setLoadingConv] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -72,6 +88,9 @@ export default function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  const resetArchHighlight = () =>
+    setArchHighlight({ lit: new Set(), current: null, error: false });
+
   const newChat = () => {
     turnController.supersede();
     setActiveCid(null);
@@ -81,6 +100,7 @@ export default function ChatPage() {
     setTurnStatus(null);
     setWarnings([]);
     setTurnMeta({ refs: null, reasoning: "", tools: [] });
+    resetArchHighlight();
   };
 
   const selectConv = async (cid: string) => {
@@ -175,6 +195,13 @@ export default function ChatPage() {
     setTurnStatus(null);
     setTurnMeta({ refs: null, reasoning: "", tools: [] });
     setMessages(optimisticTurnMessages(turn.baseMessages, text));
+    resetArchHighlight(); // 每回合重置架构图点亮
+
+    const light = (...ids: string[]) =>
+      setArchHighlight((prev) => ({
+        ...prev,
+        lit: new Set([...prev.lit, ...ids]),
+      }));
 
     try {
       const outcome = await chatStream(
@@ -183,14 +210,18 @@ export default function ChatPage() {
           onStarted: (e) => {
             if (!turnController.rememberConversation(turn, e.conversation_id)) return;
             setActiveCid(e.conversation_id); // 立即拿到 cid，不猜最新
+            light(...archOnStarted());
           },
           onReferences: (e) => {
-            if (turnController.acceptsEvents(turn))
-              setTurnMeta((prev) => ({ ...prev, refs: e }));
+            if (!turnController.acceptsEvents(turn)) return;
+            setTurnMeta((prev) => ({ ...prev, refs: e }));
+            light(...archOnReferences(e));
           },
           onReasoning: (e) => {
-            if (turnController.acceptsEvents(turn))
-              setTurnMeta((prev) => ({ ...prev, reasoning: prev.reasoning + e.delta }));
+            if (!turnController.acceptsEvents(turn)) return;
+            setTurnMeta((prev) => ({ ...prev, reasoning: prev.reasoning + e.delta }));
+            light(...archOnModel());
+            setArchHighlight((prev) => ({ ...prev, current: archCurrentOnModel() }));
           },
           onDelta: (e) => {
             setMessages((m) => {
@@ -206,30 +237,34 @@ export default function ChatPage() {
             });
           },
           onToolCall: (e) => {
-            if (turnController.acceptsEvents(turn))
-              setTurnMeta((prev) => ({
-                ...prev,
-                tools: [
-                  ...prev.tools,
-                  {
-                    callId: e.tool_call_id,
-                    name: e.tool_name,
-                    args: e.tool_args,
-                    status: "running",
-                  },
-                ],
-              }));
+            if (!turnController.acceptsEvents(turn)) return;
+            setTurnMeta((prev) => ({
+              ...prev,
+              tools: [
+                ...prev.tools,
+                {
+                  callId: e.tool_call_id,
+                  name: e.tool_name,
+                  args: e.tool_args,
+                  status: "running",
+                },
+              ],
+            }));
+            light(...archOnToolCall(e.tool_name));
+            setArchHighlight((prev) => ({ ...prev, current: archCurrentOnToolCall(e.tool_name) }));
           },
           onToolResult: (e) => {
-            if (turnController.acceptsEvents(turn))
-              setTurnMeta((prev) => ({
-                ...prev,
-                tools: prev.tools.map((t) =>
-                  t.callId === e.tool_call_id
-                    ? { ...t, status: e.status, result: e.result }
-                    : t,
-                ),
-              }));
+            if (!turnController.acceptsEvents(turn)) return;
+            setTurnMeta((prev) => ({
+              ...prev,
+              tools: prev.tools.map((t) =>
+                t.callId === e.tool_call_id
+                  ? { ...t, status: e.status, result: e.result }
+                  : t,
+              ),
+            }));
+            // 工具完成 → current 回到模型（下一轮思考/终答）
+            setArchHighlight((prev) => ({ ...prev, current: archCurrentOnModel() }));
           },
           onContextWarning: (e) =>
             setWarnings((w) =>
@@ -249,6 +284,8 @@ export default function ChatPage() {
         await reconcileUncommittedTurn(turn, CANCELLED_STATUS);
       } else if (outcome.status === "completed") {
         // 只有已完整校验、且后面没有额外事件的 chat.completed 才进入成功刷新路径。
+        light(...archOnCompleted());
+        setArchHighlight((prev) => ({ ...prev, current: null }));
         try {
           const nextConvs = await chat.conversations();
           if (mountedRef.current && turnController.isCurrent(turn)) setConvs(nextConvs);
@@ -257,6 +294,7 @@ export default function ChatPage() {
         }
       } else if (outcome.status === "failed") {
         const message = `生成失败：${outcome.event.error.message}`;
+        setArchHighlight((prev) => ({ ...prev, error: true, current: null }));
         await reconcileUncommittedTurn(turn, message);
       }
     } catch (e) {
@@ -328,14 +366,38 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* 消息流 */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* 消息流 + 架构面板（agent 双栏） */}
+      <div className="flex-1 flex min-w-0">
+        <div className="flex-1 flex flex-col min-w-0">
         <div className="px-5 py-3 border-b border-line flex items-center gap-2 bg-panel">
           <MessageSquare className="w-4 h-4 text-oxblood" />
           <span className="font-mono text-sm font-semibold tracking-techy">CHAT</span>
           <span className="font-mono text-2xs text-mute tracking-techy">
-            · 两级记忆 + RAG 整合
+            · {chatMode === "agent" ? "Agent · ReAct 工具循环" : "两级记忆 + RAG 整合"}
           </span>
+          {/* ADR-0016：RAG/Agent 分段控制（顶部 header，全局状态） */}
+          <div className="ml-auto flex items-center rounded border border-line overflow-hidden">
+            {(["rag", "agent"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  if (chatMode !== m) {
+                    setChatMode(m);
+                    resetArchHighlight();
+                  }
+                }}
+                title={m === "rag" ? "RAG：确定性检索问答" : "Agent：ReAct 工具循环 + 架构图"}
+                className={`px-3 py-1 text-xs font-mono tracking-techy transition-colors ${
+                  chatMode === m
+                    ? "bg-oxblood text-paper"
+                    : "text-mute hover:text-ink hover:bg-paper"
+                }`}
+              >
+                {m === "rag" ? "RAG" : "Agent"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5">
@@ -386,24 +448,6 @@ export default function ChatPage() {
 
         {/* 输入器 */}
         <div className="px-5 py-3 border-t border-line bg-panel">
-          <div className="max-w-3xl mx-auto flex items-center gap-2 mb-2">
-            <span className="font-mono text-2xs text-mute tracking-techy">模式</span>
-            {(["rag", "agent"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setChatMode(m)}
-                title={m === "rag" ? "RAG：确定性检索问答" : "Agent：ReAct 工具循环"}
-                className={`px-2 py-0.5 text-2xs font-mono rounded border transition-colors ${
-                  chatMode === m
-                    ? "border-oxblood text-oxblood bg-oxblood/5"
-                    : "border-line text-mute hover:text-ink"
-                }`}
-              >
-                {m === "rag" ? "RAG" : "Agent"}
-              </button>
-            ))}
-          </div>
           <div className="max-w-3xl mx-auto flex items-end gap-2">
             <textarea
               value={input}
@@ -434,6 +478,15 @@ export default function ChatPage() {
             )}
           </div>
         </div>
+        </div>
+        {/* Agent 模式双栏：右侧全链路架构图（实时高亮） */}
+        {chatMode === "agent" && (
+          <AgentArchDiagram
+            lit={archHighlight.lit}
+            current={archHighlight.current}
+            error={archHighlight.error}
+          />
+        )}
       </div>
     </div>
   );
