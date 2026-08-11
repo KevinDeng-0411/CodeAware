@@ -4,6 +4,7 @@ import type {
   AgentRunDetail,
   AgentRunListItem,
   AgentRunListVO,
+  AgentRunReport,
   AgentRunReviewInput,
   AgentRunStats,
   AiReadmeCapability,
@@ -250,6 +251,7 @@ export const agentRuns = {
       body: JSON.stringify(input),
     }),
   stats: () => call<AgentRunStats>("/api/chat/agent-runs/stats"),
+  report: () => call<AgentRunReport>("/api/chat/agent-runs/report"),
 };
 
 // ---------- Prompt ----------

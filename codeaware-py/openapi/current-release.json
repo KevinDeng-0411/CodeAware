@@ -257,6 +257,80 @@
         "title": "AgentRunListVO",
         "type": "object"
       },
+      "AgentRunReport": {
+        "description": "Agent 运行报表（ADR-0017 数据分析层）：聚合 agent_runs 揭示改进方向。",
+        "properties": {
+          "avg_steps": {
+            "title": "Avg Steps",
+            "type": "number"
+          },
+          "avg_tool_calls": {
+            "title": "Avg Tool Calls",
+            "type": "number"
+          },
+          "closure_rate": {
+            "title": "Closure Rate",
+            "type": "number"
+          },
+          "daily_trend": {
+            "items": {
+              "$ref": "#/components/schemas/DailyTrend"
+            },
+            "title": "Daily Trend",
+            "type": "array"
+          },
+          "error_tool_runs": {
+            "title": "Error Tool Runs",
+            "type": "integer"
+          },
+          "review_funnel": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Review Funnel",
+            "type": "object"
+          },
+          "status_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Status Counts",
+            "type": "object"
+          },
+          "stop_reason_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Stop Reason Counts",
+            "type": "object"
+          },
+          "tool_usage": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUsageItem"
+            },
+            "title": "Tool Usage",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "status_counts",
+          "stop_reason_counts",
+          "closure_rate",
+          "avg_steps",
+          "avg_tool_calls",
+          "error_tool_runs",
+          "review_funnel",
+          "tool_usage",
+          "daily_trend"
+        ],
+        "title": "AgentRunReport",
+        "type": "object"
+      },
       "AgentRunReviewRequest": {
         "properties": {
           "category": {
@@ -909,6 +983,44 @@
           "conversation_id"
         ],
         "title": "ConversationItem",
+        "type": "object"
+      },
+      "DailyTrend": {
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "empty": {
+            "title": "Empty",
+            "type": "integer"
+          },
+          "error": {
+            "title": "Error",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "total",
+          "completed",
+          "error",
+          "empty",
+          "cancelled"
+        ],
+        "title": "DailyTrend",
         "type": "object"
       },
       "DocumentDetailVO": {
@@ -1760,6 +1872,32 @@
         "title": "Result[AgentRunListVO]",
         "type": "object"
       },
+      "Result_AgentRunReport_": {
+        "properties": {
+          "code": {
+            "default": 1,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "msg": {
+            "default": "success",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "title": "Result[AgentRunReport]",
+        "type": "object"
+      },
       "Result_AgentRunStats_": {
         "properties": {
           "code": {
@@ -2557,6 +2695,29 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "ToolUsageItem": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "calls",
+          "errors"
+        ],
+        "title": "ToolUsageItem",
+        "type": "object"
+      },
       "UnitTestRequest": {
         "properties": {
           "file_path": {
@@ -3092,6 +3253,33 @@
           }
         ],
         "summary": "List Agent Runs",
+        "tags": [
+          "Chat"
+        ]
+      }
+    },
+    "/api/chat/agent-runs/report": {
+      "get": {
+        "description": "Agent 运行报表（ADR-0017 数据分析层）：聚合 agent_runs 揭示改进方向。\n\n工具使用分布（trace tool_call）、工具错误热点（tool_result error）、状态/停止原因\n分布、closure 率、平均步数、评审漏斗、最近 7 天趋势。",
+        "operationId": "get_agent_run_report_api_chat_agent_runs_report_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result_AgentRunReport_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Agent Run Report",
         "tags": [
           "Chat"
         ]

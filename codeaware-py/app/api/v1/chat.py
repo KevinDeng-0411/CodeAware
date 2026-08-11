@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+from datetime import datetime, timedelta
 
 import anyio
 from fastapi import APIRouter, Depends, Query
@@ -26,8 +27,11 @@ from app.schemas.agent_run import (
     AgentRunDetail,
     AgentRunListItem,
     AgentRunListVO,
+    AgentRunReport,
     AgentRunReviewRequest,
     AgentRunStats,
+    DailyTrend,
+    ToolUsageItem,
 )
 from app.schemas.chat import (
     ChatMessageVO,
@@ -398,6 +402,100 @@ async def get_agent_run_stats(db: AsyncSession = Depends(get_db), user: User = D
     status_counts = {status: count for status, count in rows.all()}
     return Result.ok(
         AgentRunStats(total=total, needs_review_pending=pending, status_counts=status_counts)
+    )
+
+
+@router.get("/agent-runs/report", response_model=Result[AgentRunReport])
+async def get_agent_run_report(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Agent 运行报表（ADR-0017 数据分析层）：聚合 agent_runs 揭示改进方向。
+
+    工具使用分布（trace tool_call）、工具错误热点（tool_result error）、状态/停止原因
+    分布、closure 率、平均步数、评审漏斗、最近 7 天趋势。
+    """
+    rows = (
+        await db.execute(
+            select(AgentRun)
+            .join(Conversation, AgentRun.conversation_id == Conversation.conversation_id)
+            .where(_ownership_filter(user))
+        )
+    ).scalars().all()
+
+    status_counts: dict[str, int] = {}
+    stop_reason_counts: dict[str, int] = {}
+    steps_total = 0
+    tool_calls_total = 0
+    error_tool_runs = 0
+    review_funnel = {"pending": 0, "accepted": 0, "rejected": 0, "synced": 0}
+    tool_usage: dict[str, int] = {}
+    tool_errors: dict[str, int] = {}
+    call_to_tool: dict[str, str] = {}
+    daily: dict[str, dict] = {}
+
+    for r in rows:
+        status_counts[r.status] = status_counts.get(r.status, 0) + 1
+        stop_reason_counts[r.stop_reason] = stop_reason_counts.get(r.stop_reason, 0) + 1
+        steps_total += r.steps
+        tool_calls_total += r.tool_calls
+        if r.error_tools > 0:
+            error_tool_runs += 1
+        if r.review_status in review_funnel:
+            review_funnel[r.review_status] += 1
+        if r.synced:
+            review_funnel["synced"] += 1
+        day = r.created_at.strftime("%Y-%m-%d") if r.created_at else "unknown"
+        bucket = daily.setdefault(
+            day, {"total": 0, "completed": 0, "error": 0, "empty": 0, "cancelled": 0}
+        )
+        bucket["total"] += 1
+        if r.status in bucket:
+            bucket[r.status] += 1
+        for entry in r.trace or []:
+            etype = entry.get("type")
+            if etype == "tool_call":
+                name = entry.get("name", "?")
+                call_to_tool[entry.get("call_id", "")] = name
+                tool_usage[name] = tool_usage.get(name, 0) + 1
+            elif etype == "tool_result":
+                name = call_to_tool.get(entry.get("call_id", ""), "?")
+                if entry.get("status") == "error":
+                    tool_errors[name] = tool_errors.get(name, 0) + 1
+
+    n = len(rows)
+    today = datetime.now().date()
+    trend_dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+    daily_trend = [
+        DailyTrend(
+            date=d, total=(daily.get(d) or {}).get("total", 0),
+            completed=(daily.get(d) or {}).get("completed", 0),
+            error=(daily.get(d) or {}).get("error", 0),
+            empty=(daily.get(d) or {}).get("empty", 0),
+            cancelled=(daily.get(d) or {}).get("cancelled", 0),
+        )
+        for d in trend_dates
+    ]
+
+    tool_usage_items = sorted(
+        (
+            ToolUsageItem(tool=t, calls=c, errors=tool_errors.get(t, 0))
+            for t, c in tool_usage.items()
+        ),
+        key=lambda x: x.calls,
+        reverse=True,
+    )
+
+    return Result.ok(
+        AgentRunReport(
+            total=n,
+            status_counts=status_counts,
+            stop_reason_counts=stop_reason_counts,
+            closure_rate=round(status_counts.get("completed", 0) / n, 3) if n else 0.0,
+            avg_steps=round(steps_total / n, 2) if n else 0.0,
+            avg_tool_calls=round(tool_calls_total / n, 2) if n else 0.0,
+            error_tool_runs=error_tool_runs,
+            review_funnel=review_funnel,
+            tool_usage=tool_usage_items,
+            daily_trend=daily_trend,
+        )
     )
 
 

@@ -304,6 +304,36 @@ async def test_agent_run_review_endpoint(client):
     assert r3.json()["data"]["review_status"] == "rejected"
 
 
+async def test_agent_run_report(client):
+    """报表端点：聚合状态/工具使用/错误热点/评审漏斗/7 天趋势。"""
+    await _seed_run("tid-rpt-1", "conv-rpt-1")
+    await _seed_conversation("conv-rpt-2")
+    async with AsyncSessionLocal() as s:
+        s.add(AgentRun(
+            turn_id="tid-rpt-2", conversation_id="conv-rpt-2", query="q2", status="error",
+            stop_reason="error", steps=3, tool_calls=2, error_tools=1, needs_review=True,
+            trace=[
+                {"type": "tool_call", "step": 1, "name": "search_knowledge", "args": {}, "call_id": "c1"},
+                {"type": "tool_result", "step": 1, "call_id": "c1", "status": "ok", "result": "r"},
+                {"type": "tool_call", "step": 1, "name": "get_document", "args": {}, "call_id": "c2"},
+                {"type": "tool_result", "step": 1, "call_id": "c2", "status": "error", "result": "e"},
+            ],
+        ))
+        await s.commit()
+
+    r = await client.get("/api/chat/agent-runs/report")
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["total"] >= 2
+    assert data["error_tool_runs"] >= 1
+    assert "error" in data["status_counts"]
+    usage = {u["tool"]: u for u in data["tool_usage"]}
+    assert usage["search_knowledge"]["calls"] >= 1
+    assert usage["get_document"]["errors"] >= 1  # 工具结果 error 归因到工具
+    assert len(data["daily_trend"]) == 7
+    assert set(data["review_funnel"]) == {"pending", "accepted", "rejected", "synced"}
+
+
 async def test_agent_run_ownership(client):
     """他用户会话下的 run 对当前登录用户 404（不泄露存在性）。"""
     from app.core.security import hash_password

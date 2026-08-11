@@ -14,6 +14,7 @@ import { agentRuns } from "../api/client";
 import type {
   AgentRunDetail,
   AgentRunListItem,
+  AgentRunReport,
   AgentRunStats,
   ContextSnapshot,
   TraceEntry,
@@ -139,12 +140,92 @@ function ContextSnapshot({ snapshot }: { snapshot: ContextSnapshot | null }) {
   );
 }
 
+function ReportPanel({ report }: { report: AgentRunReport }) {
+  const maxCalls = Math.max(1, ...report.tool_usage.map((t) => t.calls));
+  const maxDaily = Math.max(1, ...report.daily_trend.map((d) => d.total));
+  return (
+    <div className="rounded border border-line bg-panel/50 p-4 mb-4 space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="font-mono text-2xs text-mute">
+          closure <b className="text-teal">{Math.round(report.closure_rate * 100)}%</b>
+        </span>
+        <span className="font-mono text-2xs text-mute">
+          avg 步 <b className="text-ink">{report.avg_steps}</b>
+        </span>
+        <span className="font-mono text-2xs text-mute">
+          avg 工具 <b className="text-ink">{report.avg_tool_calls}</b>
+        </span>
+        <span className="font-mono text-2xs text-oxblood">
+          异常 run <b className="text-oxblood">{report.error_tool_runs}</b>
+        </span>
+      </div>
+
+      <div>
+        <div className="font-mono text-2xs uppercase tracking-techy text-mute mb-2">工具使用</div>
+        {report.tool_usage.length === 0 ? (
+          <p className="font-mono text-2xs text-mute/70">暂无工具调用</p>
+        ) : (
+          <div className="space-y-1.5">
+            {report.tool_usage.map((t) => (
+              <div key={t.tool} className="flex items-center gap-2">
+                <span className="w-36 font-mono text-2xs text-mute truncate">{t.tool}</span>
+                <div className="flex-1 h-2 rounded bg-graph/60 overflow-hidden">
+                  <div
+                    className="h-2 rounded bg-teal"
+                    style={{ width: `${(t.calls / maxCalls) * 100}%` }}
+                  />
+                </div>
+                <span className="w-14 text-right font-mono text-2xs text-mute">{t.calls} 次</span>
+                {t.errors > 0 && (
+                  <span className="w-14 text-right font-mono text-2xs text-oxblood" title="工具结果 error 次数">
+                    {t.errors} 错
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="font-mono text-2xs uppercase tracking-techy text-mute mb-2">失败沉淀漏斗</div>
+        <div className="flex items-center gap-3 flex-wrap">
+          {(["pending", "accepted", "rejected", "synced"] as const).map((k) => (
+            <span key={k} className="font-mono text-2xs text-mute">
+              {k} <b className="text-ink">{report.review_funnel[k] ?? 0}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="font-mono text-2xs uppercase tracking-techy text-mute mb-2">近 7 天趋势</div>
+        <div className="flex items-end gap-1 h-16">
+          {report.daily_trend.map((d) => (
+            <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5">
+              <div className="flex-1 w-full flex items-end">
+                <div
+                  className="w-full bg-teal/70 rounded-sm"
+                  style={{ height: `${Math.max((d.total / maxDaily) * 100, 3)}%` }}
+                  title={`${d.date} · ${d.total} run（${d.completed} 完成 / ${d.error} 错 / ${d.empty} 空）`}
+                />
+              </div>
+              <span className="font-mono text-[9px] text-mute">{d.date.slice(5)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) => void }) {
   const toast = useToast();
   const focusKnowledgeDoc = useAgentOps((s) => s.focusKnowledgeDoc);
   const focusConversation = useAgentOps((s) => s.focusConversation);
 
   const [stats, setStats] = useState<AgentRunStats | null>(null);
+  const [report, setReport] = useState<AgentRunReport | null>(null);
   const [records, setRecords] = useState<AgentRunListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -166,6 +247,14 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
   const loadStats = async () => {
     try {
       setStats(await agentRuns.stats());
+    } catch (e) {
+      toast.show(e);
+    }
+  };
+
+  const loadReport = async () => {
+    try {
+      setReport(await agentRuns.report());
     } catch (e) {
       toast.show(e);
     }
@@ -193,6 +282,7 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
 
   useEffect(() => {
     void loadStats();
+    void loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // 离散筛选（待评审 / 评审状态）变化时自动刷新第一页
@@ -286,6 +376,8 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
           ))}
         </div>
       )}
+
+      {report && <ReportPanel report={report} />}
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button type="button" onClick={() => setNeedsReview(null)} className={filterBtn(needsReview === null)}>

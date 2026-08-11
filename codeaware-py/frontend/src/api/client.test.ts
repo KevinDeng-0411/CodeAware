@@ -386,3 +386,32 @@ describe("agentRuns.detail/review/stats", () => {
     expect(data.needs_review_pending).toBe(1);
   });
 });
+
+describe("agentRuns.report", () => {
+  it("请求报表路径并解包", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 1,
+        msg: "success",
+        data: {
+          total: 3,
+          status_counts: { completed: 2, error: 1 },
+          stop_reason_counts: { final: 2, error: 1 },
+          closure_rate: 0.667,
+          avg_steps: 2,
+          avg_tool_calls: 1,
+          error_tool_runs: 1,
+          review_funnel: { pending: 1, accepted: 0, rejected: 0, synced: 0 },
+          tool_usage: [{ tool: "search_knowledge", calls: 2, errors: 0 }],
+          daily_trend: [{ date: "2026-08-11", total: 3, completed: 2, error: 1, empty: 0, cancelled: 0 }],
+        },
+      }),
+    } as Response);
+    const data = await agentRuns.report();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/agent-runs/report");
+    expect(data.closure_rate).toBe(0.667);
+    expect(data.tool_usage[0].calls).toBe(2);
+  });
+});

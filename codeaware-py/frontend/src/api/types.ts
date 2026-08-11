@@ -238,6 +238,34 @@ export interface AgentRunStats {
   status_counts: Record<string, number>;
 }
 
+export interface ToolUsageItem {
+  tool: string;
+  calls: number;
+  errors: number;
+}
+
+export interface DailyTrend {
+  date: string;
+  total: number;
+  completed: number;
+  error: number;
+  empty: number;
+  cancelled: number;
+}
+
+export interface AgentRunReport {
+  total: number;
+  status_counts: Record<string, number>;
+  stop_reason_counts: Record<string, number>;
+  closure_rate: number;
+  avg_steps: number;
+  avg_tool_calls: number;
+  error_tool_runs: number;
+  review_funnel: Record<string, number>;
+  tool_usage: ToolUsageItem[];
+  daily_trend: DailyTrend[];
+}
+
 export interface AgentRunReviewInput {
   decision: "accepted" | "rejected";
   expected_tools?: string[];

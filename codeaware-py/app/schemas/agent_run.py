@@ -65,3 +65,33 @@ class AgentRunStats(BaseModel):
     total: int
     needs_review_pending: int
     status_counts: dict[str, int]
+
+
+class ToolUsageItem(BaseModel):
+    tool: str
+    calls: int
+    errors: int  # tool_result status=error 次数（含正常错误结果）
+
+
+class DailyTrend(BaseModel):
+    date: str  # YYYY-MM-DD
+    total: int
+    completed: int
+    error: int
+    empty: int
+    cancelled: int
+
+
+class AgentRunReport(BaseModel):
+    """Agent 运行报表（ADR-0017 数据分析层）：聚合 agent_runs 揭示改进方向。"""
+
+    total: int
+    status_counts: dict[str, int]
+    stop_reason_counts: dict[str, int]
+    closure_rate: float  # completed / total
+    avg_steps: float
+    avg_tool_calls: float
+    error_tool_runs: int  # 含真实工具异常（error_tools>0）的 run 数
+    review_funnel: dict[str, int]  # pending / accepted / rejected / synced
+    tool_usage: list[ToolUsageItem]  # 按调用次数降序
+    daily_trend: list[DailyTrend]  # 最近 7 天
