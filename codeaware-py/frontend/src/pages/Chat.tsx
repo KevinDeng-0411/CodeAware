@@ -366,9 +366,21 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* 消息流 + 架构面板（agent 双栏） */}
-      <div className="flex-1 flex min-w-0">
-        <div className="flex-1 flex flex-col min-w-0">
+      {/* 架构图（agent 模式，中间大区）+ 对话（右侧） */}
+      {chatMode === "agent" && (
+        <div className="flex-1 min-w-0 border-r border-line bg-panel flex flex-col">
+          <AgentArchDiagram
+            lit={archHighlight.lit}
+            current={archHighlight.current}
+            error={archHighlight.error}
+          />
+        </div>
+      )}
+      <div
+        className={`flex flex-col min-w-0 ${
+          chatMode === "agent" ? "w-[34rem] shrink-0" : "flex-1"
+        }`}
+      >
         <div className="px-5 py-3 border-b border-line flex items-center gap-2 bg-panel">
           <MessageSquare className="w-4 h-4 text-oxblood" />
           <span className="font-mono text-sm font-semibold tracking-techy">CHAT</span>
@@ -478,15 +490,6 @@ export default function ChatPage() {
             )}
           </div>
         </div>
-        </div>
-        {/* Agent 模式双栏：右侧全链路架构图（实时高亮） */}
-        {chatMode === "agent" && (
-          <AgentArchDiagram
-            lit={archHighlight.lit}
-            current={archHighlight.current}
-            error={archHighlight.error}
-          />
-        )}
       </div>
     </div>
   );
