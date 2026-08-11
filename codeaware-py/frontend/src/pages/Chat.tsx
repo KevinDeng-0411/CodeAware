@@ -378,7 +378,7 @@ export default function ChatPage() {
       )}
       <div
         className={`flex flex-col min-w-0 ${
-          chatMode === "agent" ? "w-[34rem] shrink-0" : "flex-1"
+          chatMode === "agent" ? "w-[26rem] shrink-0" : "flex-1"
         }`}
       >
         <div className="px-5 py-3 border-b border-line flex items-center gap-2 bg-panel">
