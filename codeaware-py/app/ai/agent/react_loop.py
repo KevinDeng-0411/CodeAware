@@ -54,6 +54,8 @@ async def react_loop(
     nxt,
     state: ReactLoopState,
     max_steps: int = DEFAULT_MAX_STEPS,
+    *,
+    reflection_model=None,
 ):
     """ReAct 循环 async generator（薄壳，内部跑 StateGraph）。
 
@@ -62,8 +64,12 @@ async def react_loop(
     tool_map: {工具名: BaseTool}
     nxt: sequence 生成器回调（单调递增；yield 时现分配，保证 SSE id 严格递增）
     state: 结束时填充 text / steps / trace / stop_reason / tool_calls / error_tools
+    reflection_model: Reflection 评估用模型（应传非 thinking 实例，见 get_chat_model(thinking=False)）；
+        缺省时复用 model（bind_tools 绑定模型上 function_calling 不可用，仅测试用）
     """
-    graph: CompiledStateGraph = build_agent_graph(model, tool_map, max_steps)
+    graph: CompiledStateGraph = build_agent_graph(
+        model, tool_map, max_steps, reflection_model=reflection_model
+    )
     init = {
         "messages": messages,
         "steps": 0,
@@ -83,6 +89,7 @@ async def react_loop(
         "question": messages[-1].content if messages else "",
         "reflections": 0,
         "reflection_done": False,
+        "draft_deltas": [],
     }
     final = init
     async for mode, chunk in graph.astream(
