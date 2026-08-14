@@ -15,17 +15,7 @@ from app.ai.rag.reranker import CrossEncoderReranker, RerankerPort
 from app.core.config import settings
 
 
-@lru_cache
-def get_chat_model(thinking: bool = True) -> ChatDeepSeek:
-    """LLM: DeepSeek（ChatDeepSeek 提取 reasoning_content，供 C6 思考过程展示）。
-
-    切 ChatDeepSeek 而非 ChatOpenAI：ChatOpenAI 官方不提取第三方 provider 的
-    reasoning_content（langchain-openai 文档明示）。C6 需流式捕获 reasoning。
-
-    thinking=False 返回非思考模型（extra_body thinking disabled）：供 Reflection
-    等结构化输出场景（thinking 下 function_calling 不可用，见 deepseek-notes.md）。
-    lru_cache 对两个参数各自缓存单例。
-    """
+def _build_chat_model(extra_body) -> ChatDeepSeek:
     return ChatDeepSeek(
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
@@ -33,8 +23,32 @@ def get_chat_model(thinking: bool = True) -> ChatDeepSeek:
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
         timeout=120,
-        extra_body={"thinking": {"type": "disabled"}} if not thinking else None,
+        extra_body=extra_body,
     )
+
+
+@lru_cache
+def get_chat_model() -> ChatDeepSeek:
+    """LLM: DeepSeek（ChatDeepSeek 提取 reasoning_content，供 C6 思考过程展示）。
+
+    切 ChatDeepSeek 而非 ChatOpenAI：ChatOpenAI 官方不提取第三方 provider 的
+    reasoning_content（langchain-openai 文档明示）。C6 需流式捕获 reasoning。
+
+    注意：此函数被 FastAPI 用作 Depends()，**不能加参数**（会被当成请求 query
+    参数暴露进 OpenAPI）。非 thinking 模型见 get_reflection_model()。
+    """
+    return _build_chat_model(None)
+
+
+@lru_cache
+def get_reflection_model() -> ChatDeepSeek:
+    """非 thinking 模型（extra_body thinking disabled）：Reflection 结构化输出用。
+
+    thinking 下 function_calling 不可用（见 deepseek-notes.md），故反射评估用
+    独立非 thinking 实例。独立函数而非给 get_chat_model 加参数：后者被 FastAPI
+    Depends 引用，加参数会污染 OpenAPI。
+    """
+    return _build_chat_model({"thinking": {"type": "disabled"}})
 
 
 @lru_cache
