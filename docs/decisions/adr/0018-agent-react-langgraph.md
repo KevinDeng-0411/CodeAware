@@ -64,6 +64,28 @@ START → agent → [有 tool_calls] → tools → [收敛 → 注入 HumanMessa
 **天然成立**：reflect 节点走 `ainvoke`/结构化输出、不发 custom token，评估中间 token 不污染
 前端回答流（无需按 `metadata.langgraph_node` 过滤）。
 
+## Reflection 生产化（2026-08-14 追加）
+
+初版 Reflection 是"实验开关"，两个真问题：**draft token 泄漏**（前端看到草稿+重写拼接，
+流式展示 ≠ 落库 `state.text`）、**结构化输出是死代码**（thinking 绑定模型 function_calling
+不可用）。本轮修成真可用：
+
+- **draft 缓冲（修泄漏）**：reflection 开启时 agent 节点在 draft 轮缓冲 content（reasoning
+  仍实时流），reflect 接受后把缓冲内容作为 token 事件发出——前端只见最终被接受的答案，SSE
+  协议零改动。`draft_deltas` 经节点 return 更新（LastValue replace），不原地改 state dict。
+- **独立非 thinking 模型**：`get_reflection_model()`（`app/ai/config.py`）返回 `extra_body
+  thinking disabled` 实例；reflect 用 `with_structured_output(method="function_calling")`
+  （非 thinking 上可用，见 deepseek-notes.md 实测矩阵）。
+  **注意**：不能给 `get_chat_model()` 加参数——它被 FastAPI `Depends` 引用，加参会被当成
+  query 参数暴露进 OpenAPI（已踩坑修复，故独立函数）。
+- **收敛绕过反射**（刻意）：`stop_reason==converged` 直接 END 不反射；若未来要对收敛答案也
+  反射，该轮也需缓冲。
+- **UX 取舍**（用户已定）：draft 轮 reasoning 实时流，答案在接受后一次出现。被拒草稿显示
+  reasoning 但无答案 token、直到接受，可能像"卡住"——产品备注，非 bug。
+- **验证**：`tests/test_reflection.py`（单测：draft 缓冲、恰好 1 个答案 token 事件）+ 
+  `tests/eval/test_reflection_live.py`（live_eval：真实 DeepSeek 非 thinking function_calling
+  判定解析 + 全图只出一条答案 token 流、拼接 == 最终 text）。
+
 ## 与其他 ADR 的关系
 
 - [ADR-0014](0014-langchain-thin-adapter-no-langgraph.md)：其"手写 while 不引 LangGraph"结论
@@ -81,6 +103,7 @@ START → agent → [有 tool_calls] → tools → [收敛 → 注入 HumanMessa
 - **`langgraph.prebuilt.create_react_agent`**：依赖未装的 langchain/community，且自定义节点
   更贴合现有启发式。
 - **v3 实验 API**（beta）。
-- **Reflection 结构化输出的生产化打磨**：默认关；反射模型默认复用 bind_tools 绑定的 model，
+- **Reflection 结构化输出的生产化打磨**：~~默认关；反射模型默认复用 bind_tools 绑定的 model，
   thinking 绑定下 `with_structured_output` 可能退化到 ainvoke 回退，属已知限制，重启时再给
-  反射单独的无 thinking 模型。
+  反射单独的无 thinking 模型。~~ **已于 2026-08-14 完成**（独立非 thinking 模型
+  `get_reflection_model()` + function_calling + draft 缓冲），见上文"Reflection 生产化"。
