@@ -325,6 +325,18 @@ def build_agent_graph(
         reflections = state.get("reflections", 0)
         verdict = await evaluate_draft(reflection_model, question, draft)
 
+        # 记录反射判定（ADR-0017 观测：Agent Runs 可回放，前端流程视图渲染）。
+        # feedback 是结构化输出，非 reasoning_content，不受 agent_trace_include_reasoning 脱敏影响
+        trace.append(
+            {
+                "type": "reflection",
+                "step": step,
+                "attempt": reflections + 1,
+                "accepted": verdict.accepted,
+                "feedback": verdict.feedback,
+            }
+        )
+
         if verdict.accepted or reflections >= max_reflections:
             # 接受：把缓冲的 draft token 发出（前端只见最终被接受的答案，无泄漏）
             writer = get_stream_writer()

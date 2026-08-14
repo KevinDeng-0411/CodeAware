@@ -58,4 +58,23 @@ describe("buildFlowGraph（STAGE 映射表）", () => {
     );
     expect(g.nodes.some((n) => n.kind === "override")).toBe(true);
   });
+
+  it("reflection 生成反射判定节点（accepted/feedback 展示）", () => {
+    const g = buildFlowGraph(
+      [
+        { type: "thought", step: 1, chars: 4, reasoning: "abcd" },
+        { type: "reflection", step: 1, attempt: 1, accepted: false, feedback: "回答不完整" },
+        { type: "reflection", step: 2, attempt: 2, accepted: true, feedback: "" },
+        { type: "answer", step: 2, content: "答案" },
+      ],
+      "q",
+    );
+    const refs = g.nodes.filter((n) => n.kind === "reflection");
+    expect(refs).toHaveLength(2);
+    expect(refs[0].label).toBe("反射判定 #1");
+    expect(refs[0].sub).toContain("✗ 拒绝");
+    expect(refs[0].sub).toContain("回答不完整");
+    expect(refs[1].sub).toContain("✓ 接受");
+    expect(g.stage.get(1)).toBe(refs[0].id);
+  });
 });

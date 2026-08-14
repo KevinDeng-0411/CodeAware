@@ -206,12 +206,20 @@ export interface TraceConvergenceOverride {
   step: number;
   tool_calls: unknown[];
 }
+export interface TraceReflection {
+  type: "reflection";
+  step: number;
+  attempt: number;
+  accepted: boolean;
+  feedback: string;
+}
 export type TraceEntry =
   | TraceThought
   | TraceToolCall
   | TraceToolResult
   | TraceAnswer
-  | TraceConvergenceOverride;
+  | TraceConvergenceOverride
+  | TraceReflection;
 
 export interface MemoryRefVO {
   content: string;

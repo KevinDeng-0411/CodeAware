@@ -82,6 +82,10 @@ async def test_reflection_accepted_single_draft():
     assert final["reflections"] == 0
     assert agent.astream_calls == 1
     assert final["trace"][-1]["type"] == "answer"
+    # trace 记录反射判定（ADR-0017 观测）
+    ref_trace = [t for t in final["trace"] if t["type"] == "reflection"]
+    assert len(ref_trace) == 1
+    assert ref_trace[0]["accepted"] is True and ref_trace[0]["attempt"] == 1
     # draft 缓冲：只有被接受的答案发 1 个 token，且在 reasoning 之后
     tokens = [e for e in events if e["type"] == "token"]
     assert len(tokens) == 1 and tokens[0]["delta"] == "直接回答"
@@ -102,6 +106,11 @@ async def test_reflection_rejected_then_regenerate():
     assert final["text"] == "改进后的完整回答"
     assert final["reflections"] == 1
     assert agent.astream_calls == 2  # 一稿 + 一次再生成
+    # trace 记录两次反射判定：第一次拒绝（带 feedback），第二次接受
+    ref_trace = [t for t in final["trace"] if t["type"] == "reflection"]
+    assert [r["attempt"] for r in ref_trace] == [1, 2]
+    assert ref_trace[0]["accepted"] is False and ref_trace[0]["feedback"] == "回答太简略"
+    assert ref_trace[1]["accepted"] is True
     # 被拒草稿的 token 不泄漏：只有最终接受的答案发 1 个 token
     tokens = [e for e in events if e["type"] == "token"]
     assert len(tokens) == 1 and tokens[0]["delta"] == "改进后的完整回答"
@@ -117,6 +126,9 @@ async def test_reflection_max_reflections_accept_last():
     assert final["text"] == "草稿二"
     assert final["reflections"] == 1
     assert agent.astream_calls == 2
+    # trace 记录两次判定均为拒绝（verdict），达上限后仍用最后一稿
+    ref_trace = [t for t in final["trace"] if t["type"] == "reflection"]
+    assert [r["accepted"] for r in ref_trace] == [False, False]
     tokens = [e for e in events if e["type"] == "token"]
     assert len(tokens) == 1 and tokens[0]["delta"] == "草稿二"
     assert final["draft_deltas"] == []
@@ -140,3 +152,6 @@ async def test_reflection_draft_not_leaked_single_answer_token():
     assert events.index(reasonings[-1]) < events.index(tokens[0])
     assert final["draft_deltas"] == []
     assert reflector.calls >= 1  # 评估确实发生了
+    # trace 记录了反射判定
+    ref_trace = [t for t in final["trace"] if t["type"] == "reflection"]
+    assert [r["accepted"] for r in ref_trace] == [False, True]

@@ -9,7 +9,8 @@ export type FlowNodeKind =
   | "tool"
   | "observation"
   | "answer"
-  | "override";
+  | "override"
+  | "reflection";
 
 export interface FlowNode {
   id: string;
@@ -101,6 +102,19 @@ export function buildFlowGraph(trace: TraceEntry[], query: string): FlowGraph {
           kind: "override",
           label: "强制终答",
           sub: `忽略 ${entry.tool_calls?.length ?? 0} 个工具调用`,
+        });
+        edges.push({ from: prev, to: id });
+        prev = id;
+        stage.set(i, id);
+        break;
+      }
+      case "reflection": {
+        const id = `rf${counter++}`;
+        nodes.push({
+          id,
+          kind: "reflection",
+          label: `反射判定 #${entry.attempt}`,
+          sub: `${entry.accepted ? "✓ 接受" : "✗ 拒绝"}${entry.feedback ? ` · ${entry.feedback.slice(0, 40)}` : ""}`,
         });
         edges.push({ from: prev, to: id });
         prev = id;
