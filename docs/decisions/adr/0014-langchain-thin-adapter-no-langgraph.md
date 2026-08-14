@@ -1,6 +1,6 @@
 # ADR-0014: LangChain 保持薄 adapter、不引入 LangGraph
 
-**状态**: 已变更——原"不引入 LangGraph"决策已由 [ADR-0015](0015-langgraph-retrieval-enhancement.md) 覆盖（检索增强已引入 LangGraph）；"完整 Agent 工具循环不引入"结论不变。**变更细节见文末**
+**状态**: 已变更——原"不引入 LangGraph"决策已由 [ADR-0015](0015-langgraph-retrieval-enhancement.md)（检索增强）与 [ADR-0018](0018-agent-react-langgraph.md)（工具循环）先后覆盖；"完整 Agent / 多 Agent 编排不引入"结论不变。**变更细节见文末**
 **日期**: 2026-08-05
 **决策者**: Kevin
 
@@ -68,3 +68,16 @@ Chat 状态机（当前）
 **为什么不变更完整 Agent 结论**：ADR-0014 的核心判断（Chat 状态机手写足够、完整 Agent 超定位）仍然成立。LangGraph 本次只用于 RAG 检索决策，不改 Chat 状态机结构。
 
 **LangChain 薄 adapter 结论不变**：仍只有 config.py import LangChain，领域逻辑 duck-typing 不受影响。
+
+---
+
+## 决策变更（2026-08-14）
+
+Agent 工具循环（ReAct 主循环）已迁到 LangGraph StateGraph，见 [ADR-0018](0018-agent-react-langgraph.md)。
+原"工具循环手写 20 行 while 即可 / 不引 LangGraph"的结论被覆盖——触发条件（多工具复杂度上升，
+本 ADR 与 [ADR-0016](0016-react-agent-evaluation.md) 预留的"需 re-evaluate"）满足：Agent 有 5 个
+工具 + 防打转 + per-tool 上限 + 收敛检测等启发式，手写循环的可维护性/扩展性收益不再成立。
+
+**不变**："完整 Agent / 多 Agent 编排 / checkpoint 持久化"仍不引入——迁移的是**单轮有状态工具
+循环的编排形态**（对外仍是薄 adapter：`react_loop` 签名与 SSE 契约不变），不是向多 Agent 平台化。
+

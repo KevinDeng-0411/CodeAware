@@ -1,6 +1,6 @@
 # ADR-0016: ReAct Agent 升级评估--thinking 模式 tool calling 原型验证
 
-**状态**: 已实施（2026-08-10 追加：agent 模式落地，CHAT_MODE=rag|agent）
+**状态**: 已实施（2026-08-10 追加：agent 模式落地，CHAT_MODE=rag|agent；2026-08-14 追加：主循环迁 LangGraph StateGraph，见 [ADR-0018](0018-agent-react-langgraph.md)）
 **日期**: 2026-08-10
 **决策者**: Kevin
 
@@ -96,7 +96,7 @@ ReAct 优势在"多步推理"，劣势在"对简单问题太重"（延迟/成本
 
 ### 实现要点
 
-- **主循环宿主**：`TurnCoordinator.run()` 的 model stream 块（单次 `astream` -> 工具循环）。手写 while 或 LangGraph StateGraph 均可（ADR-0014"手写 while"前提在多工具下不再成立，需 re-evaluate）。
+- **主循环宿主**：`TurnCoordinator.run()` 的 model stream 块（单次 `astream` -> 工具循环）。**已迁 LangGraph StateGraph**（`agent_graph.py`，[ADR-0018](0018-agent-react-langgraph.md)），`react_loop.py` 保留为薄壳（签名/SSE 契约不变）。
 - **模型调用**：`ChatDeepSeek.bind_tools(tools, tool_choice="auto", extra_body={"thinking":{"type":"enabled"}})` + `astream`，每轮 `AIMessage(additional_kwargs={"reasoning_content": ...})` 回注（原型已验证）。
 - **SSE 协议**：新增 `tool.call` / `tool.result` 事件，protocol_version 升级，前后端 `chat_events.py`/`chatEvents.ts`/`sseParser.ts` 同步。thought 走 `reasoning.delta`（契合"思考不落库"哲学）。
 - **ADR-0015 关系**：分阶段--先"前置 RAG 兜底 + ReAct 工具增强"（ADR-0015 不动），再"检索变 tool、ADR-0015 路由退役"（需重跑 golden 验证）。
@@ -116,7 +116,7 @@ ReAct 优势在"多步推理"，劣势在"对简单问题太重"（延迟/成本
 
 ## 与其他 ADR 的关系
 
-- [ADR-0014](0014-langchain-thin-adapter-no-langgraph.md)：原"不引入 LangGraph"针对完整 Agent，本 ADR 维持"当前不做完整 Agent"结论；若重启，ADR-0014"手写 while"前提需 re-evaluate（多工具复杂度上升，LangGraph 编排可能更优）。
+- [ADR-0014](0014-langchain-thin-adapter-no-langgraph.md)：原"不引入 LangGraph"针对完整 Agent，本 ADR 维持"当前不做完整 Agent"结论；"手写 while"前提已由 [ADR-0018](0018-agent-react-langgraph.md) 落地为 StateGraph（多工具复杂度上升，LangGraph 编排更优）。
 - [ADR-0015](0015-langgraph-retrieval-enhancement.md)：检索层 LangGraph 路由保持不变；完整 ReAct 落地时其路由/纠错可被工具选择吸收，届时需 re-evaluate。
 - [ADR-0009](0009-reranker-deferred.md)：同为"评估后暂缓、留重启条件"模式。
 
@@ -125,4 +125,4 @@ ReAct 优势在"多步推理"，劣势在"对简单问题太重"（延迟/成本
 - 不实施完整 ReAct（不动 TurnCoordinator / ContextBuilder / RagGraph / SSE 协议 / 前端）
 - 不扩展 typed SSE 协议
 - 不做知识库检索工具化（需 DB，属生产化阶段）
-- 不引入 LangGraph 编排 ReAct 循环（原型用手写 while 验证底层假设；LangGraph vs while 是生产化决策）
+- 不引入 LangGraph 编排 ReAct 循环 —— **此条已撤销（2026-08-14）**：主循环已迁 StateGraph（[ADR-0018](0018-agent-react-langgraph.md)），因为多工具启发式让手写 while 的维护成本超过其简单性

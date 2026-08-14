@@ -48,7 +48,7 @@
 | 路径 | 内容 |
 |------|------|
 | [roadmap/README.md](roadmap/README.md) | 升级总入口：先当前版本，后未来 Agent；含硬门禁和文档权威边界 |
-| [roadmap/langgraph-react-migration.md](roadmap/langgraph-react-migration.md) | LangGraph React 迁移 + Reflection 实施计划（待实施：适配器方案，两步走） |
+| [roadmap/langgraph-react-migration.md](roadmap/langgraph-react-migration.md) | LangGraph React 迁移 + Reflection 实施计划（已实施：适配器方案，两步走，见 ADR-0018） |
 | [roadmap/技术选型与能力地图.md](roadmap/技术选型与能力地图.md) | 当前保留/新增技术、搜索/RAG 与 Agent 能力差距、未来选型触发条件 |
 | [roadmap/模型实施任务模板.md](roadmap/模型实施任务模板.md) | 可直接交给其他编码模型的单阶段实施/只读评审任务模板 |
 | [roadmap/证据清单与解锁规则.md](roadmap/证据清单与解锁规则.md) | manifest、产物哈希、安全测试、回退边界与逐阶段授权规则 |
@@ -82,7 +82,7 @@
 | [migration/Python重构迁移文档.md](migration/Python重构迁移文档.md) | Java → Python 历史迁移记录（含 ADR 索引；不再直接下发任务） |
 | [migration/testing-notes.md](migration/testing-notes.md) | 测试与集成踩坑留痕（langchain 导入 hang / test_migration 性能 / 异步客户端 loop） |
 | [migration/后续升级计划.md](migration/后续升级计划.md) | 历史缺口和旧 U1–U5 预留，仅作背景；实施以 current-release 与个人路线为准 |
-| [decisions/adr/](decisions/adr/) | 17 份架构决策记录 0001~0017 |
+| [decisions/adr/](decisions/adr/) | 18 份架构决策记录 0001~0018 |
 | [decisions/glossary.md](decisions/glossary.md) | 领域术语表（10 术语全 settled） |
 | [integration/deepseek-notes.md](integration/deepseek-notes.md) | DeepSeek thinking/非思考模式集成约定 |
 | [interview/面试准备指南.md](interview/面试准备指南.md) | 面试讲解与追问话术 |
@@ -108,3 +108,4 @@
 | [0015](decisions/adr/0015-langgraph-retrieval-enhancement.md) | LangGraph 检索增强：智能路由 + 自我纠错（路由准确率 60/60，决策变更见 ADR-0014） |
 | [0016](decisions/adr/0016-react-agent-evaluation.md) | ReAct Agent 模式：先评估暂缓 → 实施 CHAT_MODE=agent 双模式（5 工具 + ReAct 循环 + 停止判断优化） |
 | [0017](decisions/adr/0017-agent-llmops-closed-loop.md) | Agent LLMOps 闭环：run trace + 失败沉淀入 eval + 请求边界 guardrail + memory 观测 + 前端 Agent Runs 页 |
+| [0018](decisions/adr/0018-agent-react-langgraph.md) | ReAct 编排迁 LangGraph StateGraph（react_loop 变薄壳）+ 轻量 Reflection（默认关） |

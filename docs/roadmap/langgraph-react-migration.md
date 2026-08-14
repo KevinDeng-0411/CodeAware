@@ -1,6 +1,6 @@
 # LangGraph React 迁移 + Reflection 实施计划
 
-> **状态**：已定稿待实施（2026-08-13）。实施顺序：物化 venv → 第一步纯迁移跑绿 → 第二步 Reflection → ADR 与文档 → 全量回归。
+> **状态**：已实施（2026-08-14）。实施顺序：物化 venv → 第一步纯迁移跑绿 → 第二步 Reflection → ADR 与文档 → 全量回归。**实施偏差见 §10（langgraph 1.2.10 事件机制与计划 §4.2 不同）**。
 > **目标**：Agent 编排从手写 async generator 迁到 LangGraph StateGraph（面试/可维护性/扩展性动因），并轻量加入 Reflection 节点。
 > **决策**：适配器（保留 `react_loop` 签名壳，内部换真 StateGraph，对外契约零改动）/ 分两步 / reflection 默认关。
 
@@ -123,3 +123,19 @@ async def react_loop(model, messages, tool_map, cid, turn_id, nxt, state, max_st
   - reflect token 污染回答流（必须 `metadata.langgraph_node` 抑制）
   - venv 物化失败（环境：若 iCloud 持续脱水，改用系统级 venv 重建）
   - sequence 必须 yield 时现分配（预生成/分批会破坏单调性，前端 `SEQUENCE_MISMATCH` fail-closed）
+
+## 10. 实施偏差记录（2026-08-14）
+
+§2 可行性表与 §4.2 原设想用 `astream_events(stream_mode=["custom","events"])` 转事件，
+**实测 langgraph 1.2.10 不支持**：
+
+1. `get_stream_writer()` 的 custom 事件不走 `astream_events` 的 `on_custom_event`（那是 0.2.x
+   机制），只能经 `graph.astream(stream_mode="custom")` 取。
+2. 测试 `FakeAgentLLM` 是普通类（非 runnable），`on_chat_model_stream` 不触发。
+
+**落地修正**：节点用 `get_stream_writer()` 主动发 custom 事件（`reasoning`/`token`/
+`tool_call`/`tool_result`），薄壳用 `graph.astream(stream_mode=["custom","values"])` 转 SSE。
+与模型无关（真 ChatDeepSeek 与 FakeAgentLLM 同构），且让 Reflection 的 token 抑制天然成立
+（reflect 节点不发 custom token，无需 `metadata.langgraph_node` 过滤）。详见
+[ADR-0018](../decisions/adr/0018-agent-react-langgraph.md)。
+
