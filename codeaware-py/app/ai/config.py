@@ -16,11 +16,15 @@ from app.core.config import settings
 
 
 @lru_cache
-def get_chat_model() -> ChatDeepSeek:
+def get_chat_model(thinking: bool = True) -> ChatDeepSeek:
     """LLM: DeepSeek（ChatDeepSeek 提取 reasoning_content，供 C6 思考过程展示）。
 
     切 ChatDeepSeek 而非 ChatOpenAI：ChatOpenAI 官方不提取第三方 provider 的
     reasoning_content（langchain-openai 文档明示）。C6 需流式捕获 reasoning。
+
+    thinking=False 返回非思考模型（extra_body thinking disabled）：供 Reflection
+    等结构化输出场景（thinking 下 function_calling 不可用，见 deepseek-notes.md）。
+    lru_cache 对两个参数各自缓存单例。
     """
     return ChatDeepSeek(
         api_key=settings.llm_api_key,
@@ -29,6 +33,7 @@ def get_chat_model() -> ChatDeepSeek:
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
         timeout=120,
+        extra_body={"thinking": {"type": "disabled"}} if not thinking else None,
     )
 
 
