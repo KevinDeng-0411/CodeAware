@@ -251,15 +251,18 @@ flowchart TD
     A[用户消息] --> B[构造 messages<br/>记忆 + 历史 + 摘要<br/>跳过 RAG 预检索]
     B --> C[模型 astream<br/>bind_tools 自主决策]
     C --> D{有工具调用?}
-    D -->|否| E[终答<br/>基于工具观察结果]
     D -->|是| F[执行工具<br/>search_knowledge / get_document<br/>list_documents / calculate / 时间]
     F --> G[回注 ToolMessage<br/>携带 reasoning_content]
     G --> H{信息足够?<br/>检索收敛<br/>或 达步数上限}
     H -->|否| C
     H -->|是| E
-    E --> I[持久化 ASSISTANT<br/>Transaction B]
-    I --> J[post-turn<br/>摘要 + 记忆抽取]
-    J --> K[chat.completed]
+    D -->|否| E[终答 draft<br/>缓冲，暂不流式]
+    E --> R{Reflection 自评<br/>非 thinking 模型}
+    R -->|拒绝且未达上限<br/>注入 feedback| C
+    R -->|接受 / 达上限| I[一次性流式接受后的答案]
+    I --> J[持久化 ASSISTANT<br/>Transaction B]
+    J --> K[post-turn<br/>摘要 + 记忆抽取]
+    K --> L[chat.completed]
 ```
 
 ### 5. 系统上下文/边界图

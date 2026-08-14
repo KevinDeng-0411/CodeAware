@@ -251,15 +251,18 @@ flowchart TD
     A[User message] --> B[Build messages<br/>memory + history + summary<br/>skip RAG pre-retrieval]
     B --> C[Model astream<br/>bind_tools auto decision]
     C --> D{Tool calls?}
-    D -->|no| E[Final answer<br/>based on tool observations]
     D -->|yes| F[Execute tool<br/>search_knowledge / get_document<br/>list_documents / calculate / time]
     F --> G[Append ToolMessage<br/>carry reasoning_content]
     G --> H{Info sufficient?<br/>retrieval converged<br/>or max steps}
     H -->|no| C
     H -->|yes| E
-    E --> I[Persist ASSISTANT<br/>Transaction B]
-    I --> J[Post-turn<br/>summary + memory extract]
-    J --> K[chat.completed]
+    D -->|no| E[Final answer draft<br/>buffered, not streamed yet]
+    E --> R{Reflection self-check<br/>non-thinking model}
+    R -->|reject + retries left<br/>inject feedback| C
+    R -->|accept / max reached| I[Stream accepted answer once]
+    I --> J[Persist ASSISTANT<br/>Transaction B]
+    J --> K[Post-turn<br/>summary + memory extract]
+    K --> L[chat.completed]
 ```
 
 **Live architecture display** (agent mode): the Chat page renders a static full-chain map and lights up the modules each turn actually uses — driven by the same SSE events (`tool.call` → the tool + retrieval stack, `context.references` → memory recall, `completed` → `sse`/`agent_runs`). Vertical main-line layout, collapsible branches, fixed-pixel SVG (readable text).
