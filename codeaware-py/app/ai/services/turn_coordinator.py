@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from app.ai.agent.react_loop import ReactLoopState, react_loop
 from app.ai.agent.tools import AgentToolkit
-from app.ai.config import get_reranker
+from app.ai.config import get_chat_model, get_reranker
 from app.ai.memory.long_term import LongTermMemoryManager
 from app.ai.memory.short_term import ShortTermMemoryManager, MessageEntry
 from app.ai.prompt.template_manager import PromptTemplateManager
@@ -410,7 +410,9 @@ class TurnCoordinator:
                         extra_body={"thinking": {"type": "enabled"}},
                     )
                     async for ev in react_loop(
-                        bound, messages, tool_map, cid, turn_id, nxt, state
+                        bound, messages, tool_map, cid, turn_id, nxt, state,
+                        # 反射用独立非 thinking 模型（thinking 下 function_calling 不可用）
+                        reflection_model=get_chat_model(thinking=False),
                     ):
                         yield ev
                     text = state.text
