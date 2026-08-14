@@ -72,6 +72,7 @@ class AgentState(TypedDict, total=False):
     question: str
     reflections: int
     reflection_done: bool
+    draft_deltas: list
 
 
 def _trace_thought(trace: list, step: int, reasoning: str) -> None:
@@ -143,6 +144,11 @@ def build_agent_graph(
         """
         writer = get_stream_writer()
         messages = state["messages"]
+        # 反射开启且非收敛强制轮：draft 内容缓冲，接受后才发（修 token 泄漏）；
+        # 其余（反射关 / 收敛强制终答轮）照常实时流，行为不变
+        converged_pending = bool(state.get("converged_pending"))
+        stream_live = (not reflection_enabled) or converged_pending
+        buf: list[str] = []
         accumulated = None
         async for chunk in model.astream(messages):
             if accumulated is None:
@@ -158,11 +164,13 @@ def build_agent_graph(
                 writer({"type": "reasoning", "delta": reasoning})
             delta = chunk.content if hasattr(chunk, "content") else str(chunk)
             if delta:
-                writer({"type": "token", "delta": delta})
+                if stream_live:
+                    writer({"type": "token", "delta": delta})
+                else:
+                    buf.append(delta)
 
         # 强制终答轮（convergence）不递增 steps：与原 `state.steps = round_no` 一致
         step = state.get("steps", 0)
-        converged_pending = bool(state.get("converged_pending"))
         if not converged_pending:
             step += 1
         update: dict[str, Any] = {"steps": step}
@@ -211,9 +219,15 @@ def build_agent_graph(
             if not reflection_enabled:
                 _trace_answer(trace, step, content)
                 update["stop_reason"] = STOP_REASON_FINAL
+            else:
+                # draft：内容已缓冲，交给 reflect 接受后发（经 return 更新，LastValue replace）
+                update["draft_deltas"] = buf
             update["has_tool_calls"] = False
             return update
 
+        # 有 tool_calls：flush 缓冲的 content（反射关时 buf 空行为不变；工具轮 content 通常为空）
+        for d in buf:
+            writer({"type": "token", "delta": d})
         update.update({"has_tool_calls": True, "tool_calls": tool_calls})
         return update
 
@@ -299,10 +313,10 @@ def build_agent_graph(
         return update
 
     async def reflect_node(state: AgentState) -> dict[str, Any]:
-        """评估 draft：接受则定稿；拒绝且未达上限则注入 feedback 回 agent 再生成。
+        """评估 draft：接受则定稿并发出缓冲的答案 token；拒绝且未达上限则注入 feedback 再生成。
 
-        reflect 节点不通过 get_stream_writer 发 token——其模型调用（结构化输出/ainvoke）
-        的中间 token 不进入前端回答流（token 抑制，ADR-0018）。
+        reflect 节点自身不产生 token 事件（结构化输出/ainvoke 的中间输出不进前端回答流，
+        token 抑制）；发出的 draft token 是 agent 节点缓冲的 draft_deltas。
         """
         trace = state["trace"]
         step = state.get("steps", 1)
@@ -312,8 +326,12 @@ def build_agent_graph(
         verdict = await evaluate_draft(reflection_model, question, draft)
 
         if verdict.accepted or reflections >= max_reflections:
+            # 接受：把缓冲的 draft token 发出（前端只见最终被接受的答案，无泄漏）
+            writer = get_stream_writer()
+            for d in state.get("draft_deltas", []):
+                writer({"type": "token", "delta": d})
             _trace_answer(trace, step, draft)
-            return {"stop_reason": STOP_REASON_FINAL, "reflection_done": True}
+            return {"stop_reason": STOP_REASON_FINAL, "reflection_done": True, "draft_deltas": []}
 
         state["messages"].append(
             HumanMessage(
@@ -323,7 +341,7 @@ def build_agent_graph(
                 )
             )
         )
-        return {"reflections": reflections + 1, "reflection_done": False}
+        return {"reflections": reflections + 1, "reflection_done": False, "draft_deltas": []}
 
     def _route_after_agent(state: AgentState) -> str:
         # 强制终答轮结束后（stop_reason=converged）或终答/无输出 → END
