@@ -12,7 +12,7 @@ AI 驱动的研发效能平台（软件工程实验室团队）：代码评审�
 - **LLMOps 闭环（ADR-0017）**：`agent_runs` run trace（回放端点）+ 失败沉淀（review → eval 回归集 sync）+ 请求边界 guardrail + memory 两 counter + 前端 Agent Runs 页（列表/流程视图/评审/三处跳转）
 - **异步**：Celery（文档解析/记忆抽取）+ Kafka（audit/metrics）
 - **P0 收口完成**：Graph 路径恢复精排、session 生命周期、任务幂等/派发、会话归属
-- 全量测试 **353 passed**（+5 Agent 编排/Reflection）；前端 53 passed（4 个 env 依赖测试需 DEEPSEEK_API_KEY，非回归）
+- 全量测试 **357 passed**（+5 Agent 编排/Reflection）；前端 53 passed
 
 ## 文档索引（编码前先查）
 
