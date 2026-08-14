@@ -10,9 +10,20 @@ import json
 
 from langchain_core.messages import AIMessageChunk
 
+from app.ai.agent.reflection import ReflectionVerdict
 from app.ai.rag.query_rewriter import QueryRewriter
 from app.ai.services.turn_coordinator import TurnCoordinator
 from app.schemas.chat_events import ChatCompleted, ToolCall, ToolResult
+
+
+class _AcceptReflection:
+    """反射假模型：始终接受（不触发重写），SSE 契约测试确定。"""
+
+    def with_structured_output(self, schema, method=None):
+        return self
+
+    async def ainvoke(self, prompt):
+        return ReflectionVerdict(accepted=True, feedback="")
 
 
 class _AgentLLM:
@@ -54,6 +65,7 @@ def _build_coordinator(agent_llm, redis_client, vector_recall, chunker, mock_llm
     return TurnCoordinator(
         agent_llm, redis_client, vector_recall, chunker,
         QueryRewriter(mock_llm), lexical_recall,
+        reflection_model=_AcceptReflection(),  # 反射默认开，注入 fake 避免打真实模型
     )
 
 

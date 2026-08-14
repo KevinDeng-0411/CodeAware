@@ -5,7 +5,7 @@
 # CodeAware
 
 AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代码评审、新人培训、团队知识检索）。
-核心是**双模式 Chat**（`CHAT_MODE=rag|agent`）：**RAG 模式**做混合检索问答（BM25 + pgvector + ONNX reranker），带引用来源和可见思考过程；**Agent 模式**跑由 LangGraph StateGraph 编排的 ReAct 工具循环（ADR-0018）——模型自主选工具（知识检索/文档/计算/时间），带可见工具轨迹、收敛感知停止，以及可选的 **Reflection**（生成后自评，不达标注入 feedback 再生成）。
+核心是**双模式 Chat**（`CHAT_MODE=rag|agent`）：**RAG 模式**做混合检索问答（BM25 + pgvector + ONNX reranker），带引用来源和可见思考过程；**Agent 模式**跑由 LangGraph StateGraph 编排的 ReAct 工具循环（ADR-0018）——模型自主选工具（知识检索/文档/计算/时间），带可见工具轨迹、收敛感知停止，以及 **Reflection**（生成后自评，不达标注入 feedback 再生成；agent 模式默认开启）。
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)
@@ -244,7 +244,7 @@ flowchart TD
 
 ### 4. Agent 模式：LangGraph StateGraph 编排的 ReAct 循环（CHAT_MODE=agent）
 
-> ADR-0018 起，循环不再是手写 async generator——`agent_graph.py` 是 LangGraph `StateGraph`（`agent`/`tools`/`reflect` 节点 + 条件边）；`react_loop.py` 是保持 SSE 契约不变的薄壳。**Reflection**（默认关，`AGENT_REFLECTION_ENABLED`）缓冲 draft、用非 thinking 模型自评、接受后一次性流式答案（无 draft 泄漏）；判定写入 `agent_runs` trace 的 `reflection` 条目。
+> ADR-0018 起，循环不再是手写 async generator——`agent_graph.py` 是 LangGraph `StateGraph`（`agent`/`tools`/`reflect` 节点 + 条件边）；`react_loop.py` 是保持 SSE 契约不变的薄壳。**Reflection**（agent 模式默认开启；kill-switch `AGENT_REFLECTION_ENABLED=false`）缓冲 draft、用非 thinking 模型自评、接受后一次性流式答案（无 draft 泄漏）；判定写入 `agent_runs` trace 的 `reflection` 条目。
 
 ```mermaid
 flowchart TD

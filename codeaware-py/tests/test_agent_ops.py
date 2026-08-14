@@ -25,6 +25,12 @@ from app.models import AgentRun, Conversation
 from app.schemas.chat import ChatRequest
 
 
+@pytest.fixture(autouse=True)
+def _disable_reflection(monkeypatch):
+    """本文件测纯 ReAct 循环 + LLMOps 观测；反射是独立关注点（见 test_reflection.py）。"""
+    monkeypatch.setattr(settings, "agent_reflection_enabled", False)
+
+
 # ---------- Fake 工具 + LLM（复用 test_agent_loop 模式）----------
 
 

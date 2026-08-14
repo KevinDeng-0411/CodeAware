@@ -6,11 +6,19 @@ reasoning_content 回注、ToolMessage 回注。
 
 import json
 
+import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 
 from app.ai.agent.react_loop import ReactLoopState, react_loop
 from app.ai.agent.tools import ToolObservation
+from app.core.config import settings
+
+
+@pytest.fixture(autouse=True)
+def _disable_reflection(monkeypatch):
+    """本文件测纯 ReAct 循环语义；反射是独立关注点（见 test_reflection.py）。"""
+    monkeypatch.setattr(settings, "agent_reflection_enabled", False)
 
 
 @tool

@@ -123,13 +123,14 @@ class PreparedTurn:
 class TurnCoordinator:
     _active: set[str] = set()  # 类级 turn guard（local-first 单 worker）
 
-    def __init__(self, chat_model, redis_client, vector_recall, chunker, query_rewriter, lexical_recall=None) -> None:
+    def __init__(self, chat_model, redis_client, vector_recall, chunker, query_rewriter, lexical_recall=None, reflection_model=None) -> None:
         self.chat_model = chat_model
         self.redis = redis_client
         self.vector_recall = vector_recall
         self.chunker = chunker
         self.query_rewriter = query_rewriter
         self.lexical_recall = lexical_recall
+        self.reflection_model = reflection_model  # None → 默认 get_reflection_model()（测试可注入 fake）
         self.reranker = get_reranker()
         self.context_builder = ContextBuilder(chat_model, redis_client, vector_recall, lexical_recall, query_rewriter, chunker, self.reranker)
         self.post_turn_processor = PostTurnProcessor(chat_model, redis_client, vector_recall)
@@ -412,7 +413,7 @@ class TurnCoordinator:
                     async for ev in react_loop(
                         bound, messages, tool_map, cid, turn_id, nxt, state,
                         # 反射用独立非 thinking 模型（thinking 下 function_calling 不可用）
-                        reflection_model=get_reflection_model(),
+                        reflection_model=self.reflection_model or get_reflection_model(),
                     ):
                         yield ev
                     text = state.text

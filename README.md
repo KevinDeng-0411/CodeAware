@@ -5,7 +5,7 @@
 # CodeAware
 
 An AI-driven developer productivity platform designed for **software engineering lab teams** (code review, onboarding new members, team knowledge retrieval).
-The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybrid-retrieval Q&A (BM25 + pgvector + ONNX reranker) with cited sources and visible chain-of-thought; **Agent mode** runs a ReAct tool loop orchestrated in LangGraph StateGraph (ADR-0018) — the model autonomously picks tools (knowledge search / document fetch / calc / time) with a visible tool trace, convergence-aware stopping, and optional **Reflection** (self-evaluation that re-generates when a draft fails the check).
+The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybrid-retrieval Q&A (BM25 + pgvector + ONNX reranker) with cited sources and visible chain-of-thought; **Agent mode** runs a ReAct tool loop orchestrated in LangGraph StateGraph (ADR-0018) — the model autonomously picks tools (knowledge search / document fetch / calc / time) with a visible tool trace, convergence-aware stopping, and **Reflection** (self-evaluation that re-generates when a draft fails the check; on by default in agent mode).
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)
@@ -244,7 +244,7 @@ flowchart TD
 
 ### 4. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
 
-> Since ADR-0018 the loop is no longer a hand-written async generator — `agent_graph.py` is a LangGraph `StateGraph` (`agent` / `tools` / `reflect` nodes + conditional edges); `react_loop.py` is a thin shell keeping the SSE contract unchanged. **Reflection** (default off, `AGENT_REFLECTION_ENABLED`) buffers the draft, runs a non-thinking-model self-check, and streams the accepted answer once (no draft leak); verdicts land in the `agent_runs` trace as `reflection` entries.
+> Since ADR-0018 the loop is no longer a hand-written async generator — `agent_graph.py` is a LangGraph `StateGraph` (`agent` / `tools` / `reflect` nodes + conditional edges); `react_loop.py` is a thin shell keeping the SSE contract unchanged. **Reflection** (on by default in agent mode; kill-switch `AGENT_REFLECTION_ENABLED=false`) buffers the draft, runs a non-thinking-model self-check, and streams the accepted answer once (no draft leak); verdicts land in the `agent_runs` trace as `reflection` entries.
 
 ```mermaid
 flowchart TD

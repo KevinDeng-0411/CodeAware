@@ -8,7 +8,7 @@ AI 驱动的研发效能平台（软件工程实验室团队）：代码评审�
 - **双模式 Chat**：RAG 模式（默认，确定性状态机）+ Agent 模式（CHAT_MODE=agent，ReAct 工具循环，v1.1.0+）
 - **检索地基**：BM25（ParadeDB pg_search）+ jieba + pgvector + RRF 粗排（候选池 20）→ ONNX reranker 精排 top5（MRR 0.941）
 - **Agent**：5 工具（search_knowledge / get_document / list_documents / calculate / get_current_time）；停止判断 = 模型自评 + 检索收敛检测 + per-tool 上限；eval 门禁过（recall 0.944 / closure 0.944 / direct 1.0，live_eval 有 run-to-run 方差）
-- **Agent 编排**（ADR-0018）：ReAct 主循环迁 LangGraph StateGraph（`agent_graph.py`，`react_loop.py` 保留为薄壳签名/SSE 契约不变）；轻量 Reflection 节点默认关（`agent_reflection_enabled`）
+- **Agent 编排**（ADR-0018）：ReAct 主循环迁 LangGraph StateGraph（`agent_graph.py`，`react_loop.py` 保留为薄壳签名/SSE 契约不变）；Reflection 节点 **agent 模式默认开启**（RAG 无 agent 循环不受影响；`agent_reflection_enabled=false` 可 kill-switch）
 - **LLMOps 闭环（ADR-0017）**：`agent_runs` run trace（回放端点）+ 失败沉淀（review → eval 回归集 sync）+ 请求边界 guardrail + memory 两 counter + 前端 Agent Runs 页（列表/流程视图/评审/三处跳转）
 - **异步**：Celery（文档解析/记忆抽取）+ Kafka（audit/metrics）
 - **P0 收口完成**：Graph 路径恢复精排、session 生命周期、任务幂等/派发、会话归属

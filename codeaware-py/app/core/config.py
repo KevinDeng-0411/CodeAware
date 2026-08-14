@@ -77,8 +77,9 @@ class Settings(BaseSettings):
     guardrails_enabled: bool = True  # 请求边界注入检测（fail-closed 拒绝可疑查询）
     agent_trace_include_reasoning: bool = False  # True=thought 完整 reasoning 保留进 trace（默认只存元数据）
 
-    # Reflection（ADR-0018）：agent 生成后自评，不达标注入 feedback 再生成（默认关，轻量实验）
-    agent_reflection_enabled: bool = False
+    # Reflection（ADR-0018）：agent 生成后自评，不达标注入 feedback 再生成。
+    # 默认 True = agent 模式启用（RAG 模式无 agent 循环，不受影响）；False 为 kill-switch 关闭。
+    agent_reflection_enabled: bool = True
     agent_max_reflections: int = 1
 
     # 认证（团队化升级阶段 A：JWT access token，实验室内部使用）
