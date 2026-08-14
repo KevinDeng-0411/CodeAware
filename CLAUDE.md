@@ -46,6 +46,13 @@ AI 驱动的研发效能平台（软件工程实验室团队）：代码评审�
 - 架构决策写 ADR（编号延续 0016+）；当前实现以 `current-release/` 为执行权威
 - 全异步（async SQLAlchemy/redis）；端点绝不返回裸 ORM（Pydantic 投影）
 
+## 打 tag 标准
+
+- **版本语义**：语义化版本——新功能/架构改动/破坏性变化升 minor（`v1.x.0`），纯 bug 修复升 patch（`v1.x.x`）
+- **触发时机**：里程碑级——完成可交付里程碑（功能 + 文档 + 测试全绿 + 门禁过）才打，不每功能打
+- **tag 内容**：用注释 tag（`git tag -a`）：标题 `vX.Y.Z: 一句核心` + 关键改动 bullet + 门禁/测试结果
+- **与 APP_VERSION**：tag 独立——`app/core/version.py` 不随 tag 更新（API/OpenAPI 版本号保持稳定，避免每次发版改代码）
+
 ## 常用命令
 
 ```bash
