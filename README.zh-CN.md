@@ -141,60 +141,42 @@ docker compose down           # 全停（数据在 volume 中保留）
 graph TB
     subgraph Presentation["展现层"]
         React["React 19 + Vite<br/>8 模块 SPA"]
-        SSE["Typed SSE 解析<br/>10 事件, 协议 v1"]
+        SSE["Typed SSE 客户端<br/>10 事件, 协议 v1"]
     end
 
     subgraph Application["应用层 (FastAPI)"]
-        Router["API Router<br/>32 端点"]
-        Auth["JWT 认证<br/>bcrypt"]
-        TC["TurnCoordinator<br/>⚡ 状态机"]
-
+        Router["API Router + JWT 认证"]
+        TC["TurnCoordinator<br/>Chat 状态机"]
         subgraph Context["上下文构建"]
-            STM["短期记忆<br/>PG 消息 + Redis 窗口"]
-            LTM["长期记忆<br/>原子事实 + pgvector"]
+            Mem["记忆<br/>短期 + 长期"]
             RAG["RagService<br/>改写 → 混合 → 精排"]
-            RR["CrossEncoderReranker<br/>ONNX bge-reranker-v2-m3"]
-            PT["PromptTemplate<br/>版本化"]
+            RR["ONNX reranker"]
+            PT["版本化 Prompt"]
         end
-
-        subgraph Agent["Agent 模式 (CHAT_MODE=agent, ADR-0016/0018)"]
-            RL["StateGraph 循环<br/>thinking 回注 + 防打转 + 收敛 + Reflection"]
-            AT["AgentToolkit<br/>检索 / 文档 / 列表 / 计算 / 时间"]
+        subgraph Agent["Agent 模式 (ADR-0018)"]
+            Loop["LangGraph StateGraph<br/>收敛 + Reflection"]
+            Tools["AgentToolkit<br/>检索 / 文档 / 计算 / 时间"]
         end
     end
 
     subgraph Orchestration["编排层"]
-        LG["LangGraph<br/>路由 + 自我纠错"]
+        LG["LangGraph 检索路由"]
         Celery["Celery Worker<br/>解析 + 抽取"]
-        Flower["Flower<br/>:5555"]
+        Flower["Flower<br/>Celery 监控"]
     end
 
     subgraph Infrastructure["基础设施层"]
-        PG["PostgreSQL 16<br/>pgvector + pg_search BM25"]
-        Redis["Redis 7<br/>缓存 + Celery broker"]
+        PG["PostgreSQL<br/>pgvector + pg_search BM25"]
+        Redis["Redis 7<br/>缓存 + broker"]
         Kafka["Kafka<br/>审计 + 指标"]
-        Ollama["Ollama<br/>bge-m3 1024-d Metal GPU"]
+        Ollama["Ollama bge-m3"]
         DS["DeepSeek v4-flash"]
     end
 
-    React -->|"typed SSE (10 事件)"| Router
-    Router --> Auth
-    Auth --> TC
-    TC -->|"rag 模式"| Context
-    TC -->|"agent 模式"| RL
-    RL --> AT
-    AT --> RAG
-    RAG --> LG
-    RAG --> RR
-    TC -->|"提交异步任务"| Celery
-    Flower --> Celery
-    STM --> PG
-    STM --> Redis
-    LTM --> PG
-    RR --> Ollama
-    RAG --> Ollama
-    TC -->|"ChatDeepSeek astream"| DS
-    TC -->|"发送事件"| Kafka
+    Presentation --> Application
+    Application --> Orchestration
+    Application --> Infrastructure
+    Orchestration --> Infrastructure
 ```
 
 ### 2. Chat/RAG 模式：核心交互时序图

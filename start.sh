@@ -34,6 +34,15 @@ if ! is_running "$LOGDIR/worker.pid"; then
 fi
 echo "✓ celery worker (pid $(cat "$LOGDIR/worker.pid"))"
 
+# ---- 3b. Flower（Celery 监控面板，native；Docker worker 已由 entrypoint 起） ----
+if ! is_running "$LOGDIR/flower.pid"; then
+  nohup bash -c "cd '$PY' && exec uv run celery -A app.ai.celery_app flower \
+    --port=5555 --address=127.0.0.1 --loglevel=info" \
+    >"$LOGDIR/flower.log" 2>&1 &
+  echo $! > "$LOGDIR/flower.pid"
+fi
+echo "✓ flower :5555 (pid $(cat "$LOGDIR/flower.pid"))"
+
 # ---- 4. 后端 ----
 if ! is_running "$LOGDIR/backend.pid"; then
   nohup bash -c "cd '$PY' && CHAT_MODE='$CHAT_MODE' exec uv run uvicorn app.main:app \

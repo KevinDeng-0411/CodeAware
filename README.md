@@ -141,60 +141,42 @@ docker compose down           # stop everything (data persists in volumes)
 graph TB
     subgraph Presentation["Presentation Layer"]
         React["React 19 + Vite<br/>8-module SPA"]
-        SSE["Typed SSE Parser<br/>10 events, protocol v1"]
+        SSE["Typed SSE client<br/>10 events, protocol v1"]
     end
 
     subgraph Application["Application Layer (FastAPI)"]
-        Router["API Router<br/>32 endpoints"]
-        Auth["JWT Auth<br/>bcrypt"]
-        TC["TurnCoordinator<br/>⚡ state machine"]
-
+        Router["API Router + JWT Auth"]
+        TC["TurnCoordinator<br/>Chat state machine"]
         subgraph Context["Context Building"]
-            STM["ShortTermMemory<br/>PG messages + Redis window"]
-            LTM["LongTermMemory<br/>atomic facts + pgvector"]
+            Mem["Memory<br/>short-term + long-term"]
             RAG["RagService<br/>rewrite → hybrid → rerank"]
-            RR["CrossEncoderReranker<br/>ONNX bge-reranker-v2-m3"]
-            PT["PromptTemplate<br/>versioned"]
+            RR["ONNX reranker"]
+            PT["Versioned Prompt"]
         end
-
-        subgraph Agent["Agent Mode (CHAT_MODE=agent, ADR-0016/0018)"]
-            RL["StateGraph Loop<br/>thinking 回注 + 防打转 + 收敛 + Reflection"]
-            AT["AgentToolkit<br/>search / get_doc / list / calc / time"]
+        subgraph Agent["Agent Mode (ADR-0018)"]
+            Loop["LangGraph StateGraph<br/>convergence + Reflection"]
+            Tools["AgentToolkit<br/>search / doc / calc / time"]
         end
     end
 
     subgraph Orchestration["Orchestration Layer"]
-        LG["LangGraph<br/>router + self-correction"]
+        LG["LangGraph retrieval router"]
         Celery["Celery Worker<br/>parse + extract"]
-        Flower["Flower<br/>:5555"]
+        Flower["Flower<br/>Celery monitor"]
     end
 
     subgraph Infrastructure["Infrastructure Layer"]
-        PG["PostgreSQL 16<br/>pgvector + pg_search BM25"]
-        Redis["Redis 7<br/>cache + Celery broker"]
+        PG["PostgreSQL<br/>pgvector + pg_search BM25"]
+        Redis["Redis 7<br/>cache + broker"]
         Kafka["Kafka<br/>audit + metrics"]
-        Ollama["Ollama<br/>bge-m3 1024-d Metal GPU"]
+        Ollama["Ollama bge-m3"]
         DS["DeepSeek v4-flash"]
     end
 
-    React -->|"typed SSE (10 events)"| Router
-    Router --> Auth
-    Auth --> TC
-    TC -->|"rag mode"| Context
-    TC -->|"agent mode"| RL
-    RL --> AT
-    AT --> RAG
-    RAG --> LG
-    RAG --> RR
-    TC -->|"submit async task"| Celery
-    Flower --> Celery
-    STM --> PG
-    STM --> Redis
-    LTM --> PG
-    RR --> Ollama
-    RAG --> Ollama
-    TC -->|"ChatDeepSeek astream"| DS
-    TC -->|"emit events"| Kafka
+    Presentation --> Application
+    Application --> Orchestration
+    Application --> Infrastructure
+    Orchestration --> Infrastructure
 ```
 
 ### 2. Chat/RAG Mode: Core Interaction Sequence
