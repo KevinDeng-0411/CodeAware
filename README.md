@@ -5,7 +5,7 @@
 # CodeAware
 
 An AI-driven developer productivity platform designed for **software engineering lab teams** (code review, onboarding new members, team knowledge retrieval).
-The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybrid-retrieval Q&A (BM25 + pgvector + ONNX reranker) with cited sources and visible chain-of-thought; **Agent mode** runs a ReAct tool loop — the model autonomously picks tools (knowledge search / document fetch / calc / time) with a visible tool trace and convergence-aware stopping.
+The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybrid-retrieval Q&A (BM25 + pgvector + ONNX reranker) with cited sources and visible chain-of-thought; **Agent mode** runs a ReAct tool loop orchestrated in LangGraph StateGraph (ADR-0018) — the model autonomously picks tools (knowledge search / document fetch / calc / time) with a visible tool trace, convergence-aware stopping, and optional **Reflection** (self-evaluation that re-generates when a draft fails the check).
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)
@@ -30,7 +30,7 @@ The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybr
 | 🧠 **Streamed chain-of-thought** | DeepSeek `reasoning_content` streamed separately from the answer (10-event typed SSE) — the model's reasoning is visible |
 | 🇨🇳 **Chinese retrieval optimization** | jieba segmentation makes Chinese BM25 usable (exact Chinese R@5: 0.25 → **1.000**) |
 | 🔀 **Smart routing + self-correction** | LangGraph orchestration: common-sense questions skip retrieval (saves latency); weak retrieval triggers query rewriting & retry (ADR-0015) |
-| 🤖 **Agent mode** | Frontend switchable (`RAG`/`Agent`); ReAct tool loop: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning, convergence-aware stop (eval: avg_steps 2.28, closure 1.0) — ADR-0016 |
+| 🤖 **Agent mode** | Frontend switchable (`RAG`/`Agent`); ReAct tool loop orchestrated in LangGraph StateGraph: model autonomously picks tools (knowledge search / document fetch / calc / time), multi-step reasoning, convergence-aware stop (eval: avg_steps 2.28, closure 1.0) + optional **Reflection** (self-eval, re-generate on reject) — ADR-0016/0018 |
 | 🗺️ **Architecture diagram (agent)** | Live full-chain map (guardrail → orchestration → context → tools → retrieval stack → LLM → SSE → `agent_runs`) with **used-parts highlighting** during a turn; vertical main-line layout, collapsible branches, fixed-pixel SVG |
 | 📊 **Agent Runs page** | Every agent turn persisted as structured trace + context snapshot → replay (timeline / flow view) + review workflow (failures sink into the eval regression set) — ADR-0017 |
 | 🛡️ **Request-boundary guardrail** | Prompt-injection detection at `ChatRequest` (fail-closed 422), both modes; deliberately *not* on tool results (KB is curated content) |
@@ -157,8 +157,8 @@ graph TB
             PT["PromptTemplate<br/>versioned"]
         end
 
-        subgraph Agent["Agent Mode (CHAT_MODE=agent, ADR-0016)"]
-            RL["ReAct Loop<br/>thinking 回注 + 防打转 + 收敛检测"]
+        subgraph Agent["Agent Mode (CHAT_MODE=agent, ADR-0016/0018)"]
+            RL["StateGraph Loop<br/>thinking 回注 + 防打转 + 收敛 + Reflection"]
             AT["AgentToolkit<br/>search / get_doc / list / calc / time"]
         end
     end
@@ -242,7 +242,9 @@ flowchart TD
     F -->|limit reached or duplicate query| I[return 「not found」<br/>+ context.warning]
 ```
 
-### 4. Agent Mode: ReAct Loop (CHAT_MODE=agent)
+### 4. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
+
+> Since ADR-0018 the loop is no longer a hand-written async generator — `agent_graph.py` is a LangGraph `StateGraph` (`agent` / `tools` / `reflect` nodes + conditional edges); `react_loop.py` is a thin shell keeping the SSE contract unchanged. **Reflection** (default off, `AGENT_REFLECTION_ENABLED`) buffers the draft, runs a non-thinking-model self-check, and streams the accepted answer once (no draft leak); verdicts land in the `agent_runs` trace as `reflection` entries.
 
 ```mermaid
 flowchart TD
@@ -359,13 +361,13 @@ data: {"protocol_version":1,...,"sequence":N}
 
 | Metric | Value |
 |---|---|
-| Backend tests | **352 passed**, 0 failed (async tasks + Kafka + LangGraph + Agent LLMOps) |
-| Frontend tests | **61 passed** |
+| Backend tests | **357 passed**, 0 failed (async tasks + Kafka + LangGraph + Agent LLMOps + Reflection) |
+| Frontend tests | **62 passed** |
 | API endpoints | 37 |
 | Tables | 10 |
-| ADRs | 17 (0001-0017) |
+| ADRs | 18 (0001-0018) |
 | Alembic head | 0012 |
-| Delivered | C1-C6 + team A/B/C + document management + async task queue + Kafka event streaming + **Agent mode (frontend switch) + LLMOps closed loop (trace / replay / review / guardrail)** |
+| Delivered | C1-C6 + team A/B/C + document management + async task queue + Kafka event streaming + **Agent mode (frontend switch, LangGraph StateGraph orchestration) + LLMOps closed loop (trace / replay / review / guardrail) + Reflection (self-eval, opt-in)** |
 
 **Retrieval evaluation summary** (real bge-m3, 60 golden cases):
 
@@ -405,7 +407,7 @@ Running bare `pytest` is forbidden for the backend — a safe runner creates dis
 | PDF parsing | pdfminer.six (font-size heading detection) | unstructured.partition.pdf (pulls in torch); pdfplumber (table extraction, deferred — no table-heavy docs yet) |
 | Reranker | ONNX bge-reranker-v2-m3 (ADR-0009 re-evaluated) | torch CrossEncoder (heavy dependency) |
 | Intent classification | not built (90% knowledge questions) | classifier risks missed retrieval |
-| LangGraph | retrieval-layer routing + self-correction (ADR-0015) | orchestrating the Agent loop (ReAct stays a hand-written async generator, ADR-0016) |
+| LangGraph | retrieval-layer routing + self-correction (ADR-0015) + Agent tool-loop orchestration (ADR-0018) | hand-written loop kept until tool complexity grew (ADR-0014/0016, re-evaluated in ADR-0018) |
 | Refresh token | none (7-day access) | lab doesn't need rotation |
 | Concurrency guard | in-process set[str] | PG advisory lock (when multi-worker) |
 | Task queue | Celery + Redis | Kafka (event stream, not task queue) |
@@ -428,7 +430,7 @@ Running bare `pytest` is forbidden for the backend — a safe runner creates dis
 | Celery async task queue | external-action tools (sandbox / Git / MCP) |
 | Kafka event streaming (audit/metrics) | Grafana / Loki dashboard |
 | Flower task monitoring | — |
-| deterministic Chat state machine **+ frontend-switchable Agent tool loop** (ADR-0016) | external-action tools |
+| deterministic Chat state machine **+ frontend-switchable Agent tool loop** (LangGraph StateGraph, ADR-0016/0018) | external-action tools |
 | Agent run trace + replay + failure→eval sink (ADR-0017) | live Chat-page real-time highlight (P2, deferred — event-source-agnostic design already reserves it) |
 | answer cache (sync endpoint only) | answer cache on streaming endpoint |
 
@@ -460,7 +462,7 @@ Points where the design diverged from the final implementation, with the trade-o
 | [docs/roadmap/部署上线指南.md](docs/roadmap/部署上线指南.md) | deployment (LAN + cloud) |
 | [docs/roadmap/chat-to-agent/personal/README.md](docs/roadmap/chat-to-agent/personal/README.md) | Agent roadmap (locked) |
 | [docs/optimization/](docs/optimization/README.md) | retrieval optimization evals (jieba/top_k/LangGraph/RAGAS) |
-| [docs/decisions/adr/](docs/decisions/adr/) | 17 architecture decision records (0001-0017) |
+| [docs/decisions/adr/](docs/decisions/adr/) | 18 architecture decision records (0001-0018) |
 | [docs/interview/面试准备指南.md](docs/interview/面试准备指南.md) | interview deep-dive |
 | [docs/interview/面试速通版.md](docs/interview/面试速通版.md) | interview speedrun |
 | [docs/interview/项目简历介绍.md](docs/interview/项目简历介绍.md) | resume blurb |
