@@ -15,6 +15,7 @@
 """
 
 import json
+import time
 from typing import Any, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -75,11 +76,32 @@ class AgentState(TypedDict, total=False):
     draft_deltas: list
 
 
-def _trace_thought(trace: list, step: int, reasoning: str) -> None:
+def _extract_usage(msg) -> dict | None:
+    """从聚合后的 AIMessage/Chunk 归一化 token 用量：{input, output, reasoning} | None。
+
+    实测 DeepSeek usage_metadata：{input_tokens, output_tokens, total_tokens,
+    output_token_details:{reasoning}}。缺省返回 None（测试 fake 无 usage，不破坏现有断言）。
+    """
+    um = getattr(msg, "usage_metadata", None) if msg is not None else None
+    if not um:
+        return None
+    details = um.get("output_token_details") or {}
+    reasoning = details.get("reasoning") if isinstance(details, dict) else None
+    return {
+        "input": um.get("input_tokens") or 0,
+        "output": um.get("output_tokens") or 0,
+        "reasoning": reasoning or 0,
+    }
+
+
+def _trace_thought(trace: list, step: int, reasoning: str, tokens=None, ms=None) -> None:
     """追加 thought 条目。reasoning 全文暂存内存，持久化层按配置脱敏。"""
-    trace.append(
-        {"type": "thought", "step": step, "chars": len(reasoning), "reasoning": reasoning}
-    )
+    entry = {"type": "thought", "step": step, "chars": len(reasoning), "reasoning": reasoning}
+    if tokens:
+        entry["tokens"] = tokens
+    if ms is not None:
+        entry["ms"] = ms
+    trace.append(entry)
 
 
 def _trace_answer(trace: list, step: int, content: str) -> None:
@@ -149,6 +171,7 @@ def build_agent_graph(
         converged_pending = bool(state.get("converged_pending"))
         stream_live = (not reflection_enabled) or converged_pending
         buf: list[str] = []
+        round_start = time.perf_counter()
         accumulated = None
         async for chunk in model.astream(messages):
             if accumulated is None:
@@ -187,7 +210,12 @@ def build_agent_graph(
             else ""
         )
         trace = state["trace"]
-        _trace_thought(trace, step, reasoning_full)
+        # 元数据扩展：每轮 token 用量（usage_metadata 聚合后保留）+ 调用耗时
+        _trace_thought(
+            trace, step, reasoning_full,
+            tokens=_extract_usage(accumulated),
+            ms=round((time.perf_counter() - round_start) * 1000),
+        )
 
         content = accumulated.content or ""
         tool_calls = accumulated.tool_calls or []
@@ -251,6 +279,7 @@ def build_agent_graph(
             call_id = tc["id"]
             writer({"type": "tool_call", "name": name, "args": args, "call_id": call_id})
             tool_calls_total += 1
+            tool_start = time.perf_counter()
             trace.append(
                 {"type": "tool_call", "step": step, "name": name,
                  "args": args, "call_id": call_id}
@@ -290,7 +319,8 @@ def build_agent_graph(
             trace.append(
                 {"type": "tool_result", "step": step, "call_id": call_id,
                  "status": "ok" if ok else "error", "result": result_text,
-                 "doc_ids": sorted(doc_ids)}
+                 "doc_ids": sorted(doc_ids),
+                 "ms": round((time.perf_counter() - tool_start) * 1000)}
             )
             messages.append(ToolMessage(content=result_text, tool_call_id=call_id))
 
@@ -323,6 +353,7 @@ def build_agent_graph(
         draft = state.get("text", "")
         question = state.get("question", "")
         reflections = state.get("reflections", 0)
+        reflect_start = time.perf_counter()
         verdict = await evaluate_draft(reflection_model, question, draft)
 
         # 记录反射判定（ADR-0017 观测：Agent Runs 可回放，前端流程视图渲染）。
@@ -334,6 +365,7 @@ def build_agent_graph(
                 "attempt": reflections + 1,
                 "accepted": verdict.accepted,
                 "feedback": verdict.feedback,
+                "ms": round((time.perf_counter() - reflect_start) * 1000),
             }
         )
 
