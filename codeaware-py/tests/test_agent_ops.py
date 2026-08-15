@@ -157,6 +157,50 @@ async def test_react_loop_stop_reasons():
     assert state2.trace[-1]["type"] == "answer"
 
 
+async def test_react_loop_trace_captures_token_usage():
+    """元数据扩展：模型 chunk 带 usage_metadata → thought 条目记 tokens/ms。"""
+    class _UsageLLM:
+        def __init__(self):
+            self.calls = 0
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        async def astream(self, messages):
+            self.calls += 1
+            yield AIMessageChunk(
+                content="结果 2",
+                additional_kwargs={"reasoning_content": "算一下"},
+                usage_metadata={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30,
+                                "output_token_details": {"reasoning": 5}},
+            )
+
+    state, _ = await _run(_UsageLLM(), {"fake_calc": fake_calc})
+    thought = [t for t in state.trace if t["type"] == "thought"][0]
+    assert thought["tokens"] == {"input": 10, "output": 20, "reasoning": 5}
+    assert thought["ms"] >= 0
+
+
+def test_aggregate_usage():
+    """元数据扩展：_aggregate_usage 汇总 token/耗时/模型，估算成本；无 token 返回 None。"""
+    from app.ai.services.turn_coordinator import _aggregate_usage
+
+    trace = [
+        {"type": "thought", "step": 1, "tokens": {"input": 100, "output": 50, "reasoning": 20}, "ms": 500},
+        {"type": "thought", "step": 2, "tokens": {"input": 200, "output": 80, "reasoning": 30}, "ms": 700},
+        {"type": "tool_result", "step": 1, "ms": 120},
+    ]
+    u = _aggregate_usage(trace)
+    assert u["input_tokens"] == 300
+    assert u["output_tokens"] == 130
+    assert u["reasoning_tokens"] == 50
+    assert u["total_ms"] == 1320
+    assert u["cost"] > 0
+    assert "model" in u
+    # 无 token 数据 → None
+    assert _aggregate_usage([{"type": "answer", "step": 1, "content": "x"}]) is None
+
+
 # ---------- 纯函数：needs_review / 脱敏 ----------
 
 
