@@ -49,6 +49,7 @@
 |------|------|
 | [roadmap/README.md](roadmap/README.md) | 升级总入口：先当前版本，后未来 Agent；含硬门禁和文档权威边界 |
 | [roadmap/langgraph-react-migration.md](roadmap/langgraph-react-migration.md) | LangGraph React 迁移 + Reflection 实施计划（已实施：适配器方案，两步走，见 ADR-0018） |
+| [roadmap/agent-trace-metadata.md](roadmap/agent-trace-metadata.md) | Agent trace 元数据扩展实施计划（待实施：每步 token/耗时/模型配置，替代 LangSmith） |
 | [roadmap/技术选型与能力地图.md](roadmap/技术选型与能力地图.md) | 当前保留/新增技术、搜索/RAG 与 Agent 能力差距、未来选型触发条件 |
 | [roadmap/模型实施任务模板.md](roadmap/模型实施任务模板.md) | 可直接交给其他编码模型的单阶段实施/只读评审任务模板 |
 | [roadmap/证据清单与解锁规则.md](roadmap/证据清单与解锁规则.md) | manifest、产物哈希、安全测试、回退边界与逐阶段授权规则 |
