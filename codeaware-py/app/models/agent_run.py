@@ -47,4 +47,6 @@ class AgentRun(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     context_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 元数据扩展：run 汇总 token/耗时/模型配置/估算成本（见 roadmap/agent-trace-metadata.md）
+    usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

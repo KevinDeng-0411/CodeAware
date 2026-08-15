@@ -4,10 +4,22 @@
 P0 骨架无 LLM 调用可空启动；P2 起未配置将调用失败（明确报错）。
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+@dataclass(frozen=True)
+class LLMPricing:
+    """DeepSeek 单价（元 / 百万 token）。估算用，非账单精确值。
+
+    TODO: 实施时按实际 DeepSeek 价格填写（当前占位）。价格变化只改这里。
+    """
+
+    input_per_1m: float = 1.0
+    output_per_1m: float = 2.0
 
 
 class Settings(BaseSettings):

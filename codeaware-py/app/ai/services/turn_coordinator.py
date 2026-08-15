@@ -29,7 +29,7 @@ from app.ai.rag.semantic_chunker import SemanticChunker
 from app.ai.services.context_builder import ContextBuilder
 from app.ai.services.post_turn_processor import PostTurnProcessor
 from app.ai.services.rag import RagService
-from app.core.config import settings
+from app.core.config import LLMPricing, settings
 from app.core.enums import PromptType
 from app.db.session import AsyncSessionLocal
 from app.models import AgentRun, Conversation, Document, LongTermMemory
@@ -78,6 +78,37 @@ def _strip_reasoning(trace: list) -> list:
         else:
             stripped.append(entry)
     return stripped
+
+
+def _aggregate_usage(trace: list) -> dict | None:
+    """从 trace 汇总 run 级 token/耗时/模型配置/估算成本（元数据扩展）。
+
+    每步 tokens 在 thought 条目、ms 在 thought/reflection/tool_result 条目。
+    无 token 数据（fake/异常路径）返回 None。成本按 LLMPricing 估算，非账单精确值。
+    """
+    inp = out = reason = ms = 0
+    for t in trace:
+        tokens = t.get("tokens")
+        if tokens:
+            inp += tokens.get("input", 0)
+            out += tokens.get("output", 0)
+            reason += tokens.get("reasoning", 0)
+        ms += t.get("ms") or 0
+    if inp == 0 and out == 0:
+        return None
+    cost = (
+        inp / 1_000_000 * LLMPricing.input_per_1m
+        + out / 1_000_000 * LLMPricing.output_per_1m
+    )
+    return {
+        "input_tokens": inp,
+        "output_tokens": out,
+        "reasoning_tokens": reason,
+        "total_ms": ms,
+        "cost": round(cost, 6),
+        "model": settings.llm_model,
+        "temperature": settings.llm_temperature,
+    }
 
 
 class ChatTurnInProgress(Exception):
@@ -188,6 +219,7 @@ class TurnCoordinator:
                 needs_review=_compute_needs_review(status, state),
                 trace=_strip_reasoning(state.trace),
                 context_snapshot=context,
+                usage=_aggregate_usage(state.trace),
                 error=error,
             )
             async with AsyncSessionLocal() as s:
