@@ -117,6 +117,18 @@
           "turn_id": {
             "title": "Turn Id",
             "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
           }
         },
         "required": [

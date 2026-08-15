@@ -175,11 +175,19 @@ export interface AgentRunListVO {
   records: AgentRunListItem[];
 }
 
+export interface TokenUsage {
+  input: number;
+  output: number;
+  reasoning: number;
+}
+
 export interface TraceThought {
   type: "thought";
   step: number;
   chars: number;
   reasoning?: string; // 仅 agent_trace_include_reasoning=True 时存在
+  tokens?: TokenUsage; // 元数据扩展
+  ms?: number;
 }
 export interface TraceToolCall {
   type: "tool_call";
@@ -195,6 +203,7 @@ export interface TraceToolResult {
   status: "ok" | "error";
   result: string;
   doc_ids: number[];
+  ms?: number;
 }
 export interface TraceAnswer {
   type: "answer";
@@ -212,6 +221,7 @@ export interface TraceReflection {
   attempt: number;
   accepted: boolean;
   feedback: string;
+  ms?: number;
 }
 export type TraceEntry =
   | TraceThought
@@ -238,6 +248,15 @@ export interface AgentRunDetail extends AgentRunListItem {
   category: string | null;
   trace: TraceEntry[];
   context_snapshot: ContextSnapshot | null;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    reasoning_tokens: number;
+    total_ms: number;
+    cost: number;
+    model: string;
+    temperature: number;
+  } | null;
 }
 
 export interface AgentRunStats {

@@ -42,6 +42,19 @@ function preview(o: unknown, max = 60): string {
   }
 }
 
+function metaSub(entry: TraceEntry): string {
+  // 元数据扩展：tokens（thought）与 ms（thought/tool_result/reflection）追加到次要行
+  const withMeta = entry as { tokens?: { input: number; output: number }; ms?: number };
+  const parts: string[] = [];
+  if (withMeta.tokens) {
+    parts.push(`⚡${withMeta.tokens.input + withMeta.tokens.output} tok`);
+  }
+  if (withMeta.ms !== undefined) {
+    parts.push(`${withMeta.ms}ms`);
+  }
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
 export function buildFlowGraph(trace: TraceEntry[], query: string): FlowGraph {
   const nodes: FlowNode[] = [{ id: "start", kind: "start", label: "用户问题", sub: query.slice(0, 40) }];
   const edges: FlowEdge[] = [];
@@ -53,7 +66,7 @@ export function buildFlowGraph(trace: TraceEntry[], query: string): FlowGraph {
     switch (entry.type) {
       case "thought": {
         const id = `t${counter++}`;
-        nodes.push({ id, kind: "thought", label: `思考 #${entry.step}`, sub: `· ${entry.chars} 字符` });
+        nodes.push({ id, kind: "thought", label: `思考 #${entry.step}`, sub: `· ${entry.chars} 字符${metaSub(entry)}` });
         edges.push({ from: prev, to: id });
         prev = id;
         stage.set(i, id);
@@ -73,7 +86,7 @@ export function buildFlowGraph(trace: TraceEntry[], query: string): FlowGraph {
           id,
           kind: "observation",
           label: "观察",
-          sub: `${entry.status === "ok" ? "✓" : "✗"} ${entry.result.slice(0, 46)}`,
+          sub: `${entry.status === "ok" ? "✓" : "✗"} ${entry.result.slice(0, 46)}${metaSub(entry)}`,
           docIds: entry.doc_ids.length ? entry.doc_ids : undefined,
           status: entry.status,
         });
@@ -114,7 +127,7 @@ export function buildFlowGraph(trace: TraceEntry[], query: string): FlowGraph {
           id,
           kind: "reflection",
           label: `反射判定 #${entry.attempt}`,
-          sub: `${entry.accepted ? "✓ 接受" : "✗ 拒绝"}${entry.feedback ? ` · ${entry.feedback.slice(0, 40)}` : ""}`,
+          sub: `${entry.accepted ? "✓ 接受" : "✗ 拒绝"}${entry.feedback ? ` · ${entry.feedback.slice(0, 40)}` : ""}${metaSub(entry)}`,
         });
         edges.push({ from: prev, to: id });
         prev = id;

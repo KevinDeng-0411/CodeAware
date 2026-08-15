@@ -517,6 +517,7 @@ async def get_agent_run(turn_id: str, db: AsyncSession = Depends(get_db), user: 
             needs_review=run.needs_review, review_status=run.review_status,
             expected_tools=run.expected_tools, category=run.category, synced=run.synced,
             error=run.error, trace=run.trace or [], context_snapshot=run.context_snapshot,
+            usage=run.usage,
             created_at=run.created_at.isoformat() if run.created_at else None,
         )
     )

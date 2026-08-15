@@ -52,6 +52,7 @@ class AgentRunDetail(BaseModel):
     error: str | None = None
     trace: list[dict[str, Any]] = Field(default_factory=list)
     context_snapshot: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None  # 元数据扩展：token/耗时/模型/估算成本
     created_at: str | None = None
 
 

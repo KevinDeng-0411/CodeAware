@@ -38,6 +38,14 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: "text-mute border-line bg-graph/40",
 };
 
+function stepMeta(e: { tokens?: { input: number; output: number }; ms?: number }): string {
+  // 元数据扩展：时间线每步追加 token/耗时
+  const parts: string[] = [];
+  if (e.tokens) parts.push(`⚡${e.tokens.input + e.tokens.output} tok`);
+  if (e.ms !== undefined) parts.push(`${e.ms}ms`);
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
 function Timeline({ trace, onOpenDoc }: { trace: TraceEntry[]; onOpenDoc: (docIds: number[]) => void }) {
   return (
     <div className="space-y-2">
@@ -46,7 +54,7 @@ function Timeline({ trace, onOpenDoc }: { trace: TraceEntry[]; onOpenDoc: (docId
           case "thought":
             return (
               <div key={i} className="rounded border border-line/70 bg-graph/30 px-3 py-2">
-                <div className="font-mono text-2xs text-mute">🧠 思考 #{e.step} · {e.chars} 字符</div>
+                <div className="font-mono text-2xs text-mute">🧠 思考 #{e.step} · {e.chars} 字符{stepMeta(e)}</div>
                 {e.reasoning && (
                   <pre className="mt-1 whitespace-pre-wrap text-mute/80 text-2xs max-h-28 overflow-y-auto">{e.reasoning}</pre>
                 )}
@@ -64,7 +72,7 @@ function Timeline({ trace, onOpenDoc }: { trace: TraceEntry[]; onOpenDoc: (docId
             return (
               <div key={i} className="rounded border border-line/70 bg-panel px-3 py-2">
                 <div className={`font-mono text-2xs ${e.status === "ok" ? "text-graph" : "text-oxblood"}`}>
-                  {e.status === "ok" ? "✓ 观察" : "✗ 观察"}
+                  {e.status === "ok" ? "✓ 观察" : "✗ 观察"}{stepMeta(e)}
                 </div>
                 <pre className="mt-1 whitespace-pre-wrap text-mute/80 text-2xs max-h-28 overflow-y-auto">{e.result}</pre>
                 {e.doc_ids.length > 0 && (
@@ -94,6 +102,16 @@ function Timeline({ trace, onOpenDoc }: { trace: TraceEntry[]; onOpenDoc: (docId
             return (
               <div key={i} className="rounded border border-amber/30 bg-amber/5 px-3 py-2">
                 <div className="font-mono text-2xs text-amber">⚠️ 强制终答（忽略 {e.tool_calls?.length ?? 0} 个工具调用）</div>
+              </div>
+            );
+          case "reflection":
+            return (
+              <div key={i} className="rounded border border-amber/30 bg-amber/5 px-3 py-2">
+                <div className="font-mono text-2xs text-amber">
+                  🔍 反射判定 #{e.attempt} · {e.accepted ? "✓ 接受" : "✗ 拒绝"}
+                  {e.feedback ? ` · ${e.feedback}` : ""}
+                  {stepMeta(e)}
+                </div>
               </div>
             );
           default:
@@ -485,6 +503,12 @@ export default function AgentRunsPage({ onNavigate }: { onNavigate: (p: PageId) 
                 {detail.status}
               </span>
               <span className="font-mono text-2xs text-mute">stop: {detail.stop_reason} · {detail.steps} 步 · {detail.tool_calls} 工具</span>
+              {detail.usage && (
+                <span className="font-mono text-2xs text-mute">
+                  · ⚡{detail.usage.input_tokens + detail.usage.output_tokens} tok · {detail.usage.total_ms}ms
+                  · ¥{detail.usage.cost.toFixed(4)} · {detail.usage.model}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={openConversation}
