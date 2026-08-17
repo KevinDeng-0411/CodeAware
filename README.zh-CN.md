@@ -209,7 +209,25 @@ sequenceDiagram
     TC-->>F: chat.completed
 ```
 
-### 3. 智能路由与评估决策流图
+### 3. RAG 检索融合管线
+
+```mermaid
+flowchart TD
+    A[用户 query] --> B[查询改写<br/>QueryRewriter 多表达]
+    B --> C[预生成全部向量<br/>bge-m3 embed，先于任何 SQL]
+    C --> D[逐改写查询混合召回]
+    D --> V[向量腿<br/>pgvector cosine]
+    D --> L[词法腿<br/>ParadeDB BM25<br/>+ jieba 中文分词]
+    V --> F[RRF 粗排<br/>候选池 top_20 + match_type]
+    L --> F
+    F --> G[跨查询去重]
+    G --> H[ONNX reranker 精排<br/>top_5]
+    H --> I[注入 prompt → LLM 生成]
+```
+
+> 改写 + embedding 等外部调用先于第一条 SQL 完成（短事务约束，ADR-0003）；词法腿索引的是 jieba 分词文本；`match_type` 追溯 vector/keyword/both 来源参与融合。
+
+### 4. 智能路由与评估决策流图
 
 ```mermaid
 flowchart TD
@@ -224,7 +242,7 @@ flowchart TD
     F -->|达上限 或 query 重复| I[返回「未找到」<br/>+ context.warning]
 ```
 
-### 4. Agent 模式：LangGraph StateGraph 编排的 ReAct 循环（CHAT_MODE=agent）
+### 5. Agent 模式：LangGraph StateGraph 编排的 ReAct 循环（CHAT_MODE=agent）
 
 > ADR-0018 起，循环不再是手写 async generator——`agent_graph.py` 是 LangGraph `StateGraph`（`agent`/`tools`/`reflect` 节点 + 条件边）；`react_loop.py` 是保持 SSE 契约不变的薄壳。**Reflection**（agent 模式默认开启；kill-switch `AGENT_REFLECTION_ENABLED=false`）缓冲 draft、用非 thinking 模型自评、接受后一次性流式答案（无 draft 泄漏）；判定写入 `agent_runs` trace 的 `reflection` 条目。
 
@@ -247,7 +265,7 @@ flowchart TD
     K --> L[chat.completed]
 ```
 
-### 5. 系统上下文/边界图
+### 6. 系统上下文/边界图
 
 ```mermaid
 flowchart LR

@@ -209,7 +209,25 @@ sequenceDiagram
     TC-->>F: chat.completed
 ```
 
-### 3. Smart Routing & Evaluation Decision Flow
+### 3. RAG Retrieval-Fusion Pipeline
+
+```mermaid
+flowchart TD
+    A[User query] --> B[Query rewrite<br/>QueryRewriter multi-expressions]
+    B --> C[Pre-embed all queries<br/>bge-m3, before any SQL]
+    C --> D[Hybrid recall per query]
+    D --> V[Vector leg<br/>pgvector cosine]
+    D --> L[Lexical leg<br/>ParadeDB BM25 + jieba]
+    V --> F[RRF fusion<br/>candidate pool top_20 + match_type]
+    L --> F
+    F --> G[Dedupe across queries]
+    G --> H[ONNX reranker<br/>bge-reranker-v2-m3 → top_5]
+    H --> I[Inject into prompt<br/>→ LLM generation]
+```
+
+> External calls (rewrite + embed) complete before the first SQL — short-transaction constraint (ADR-0003). The lexical leg indexes jieba-segmented text; `match_type` traces vector/keyword/both source for the fusion.
+
+### 4. Smart Routing & Evaluation Decision Flow
 
 ```mermaid
 flowchart TD
@@ -224,7 +242,7 @@ flowchart TD
     F -->|limit reached or duplicate query| I[return 「not found」<br/>+ context.warning]
 ```
 
-### 4. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
+### 5. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
 
 > Since ADR-0018 the loop is no longer a hand-written async generator — `agent_graph.py` is a LangGraph `StateGraph` (`agent` / `tools` / `reflect` nodes + conditional edges); `react_loop.py` is a thin shell keeping the SSE contract unchanged. **Reflection** (on by default in agent mode; kill-switch `AGENT_REFLECTION_ENABLED=false`) buffers the draft, runs a non-thinking-model self-check, and streams the accepted answer once (no draft leak); verdicts land in the `agent_runs` trace as `reflection` entries.
 
@@ -251,7 +269,7 @@ flowchart TD
 
 ![Agent architecture diagram](./docs/screenshots/agent-arch.png)
 
-### 5. System Context / Boundary
+### 6. System Context / Boundary
 
 ```mermaid
 flowchart LR
