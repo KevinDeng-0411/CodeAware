@@ -232,15 +232,16 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[User message] --> B{Smart routing<br/>LLM decision}
-    B -->|direct: common-sense / chitchat| C[skip retrieval<br/>answer directly<br/>mark 「no KB retrieved」]
-    B -->|retrieve: technical / docs| D[hybrid retrieval<br/>BM25 + pgvector RRF<br/>coarse top_20]
-    D --> E[Reranker re-rank<br/>cross-encoder scoring]
-    E --> F{Evaluation<br/>match_type detection}
-    F -->|satisfied| G[inject top_5 → prompt<br/>→ LLM generation]
-    F -->|unsatisfied & retries<2| H[rewrite query<br/>anti-loop + seen_queries fallback]
-    H --> D
-    F -->|limit reached or duplicate query| I[return 「not found」<br/>+ context.warning]
+    B -->|direct: common-sense / chitchat| C[answer directly<br/>skip retrieval]
+    B -->|retrieve: technical / docs| D[Hybrid retrieval<br/>RRF pool top_20 → rerank top_5]
+    D --> E{Evaluate satisfied?<br/>recall ≥ 3 AND<br/>any keyword / both}
+    E -->|yes| F[inject top_5 → prompt<br/>→ LLM generation]
+    E -->|no, retries < 2| G[Rewrite query<br/>similar > 0.8 → rephrase<br/>seen_queries → stop]
+    G --> D
+    E -->|no, retries ≥ 2 / seen dup| H[return 「not found」<br/>+ context.warning]
 ```
+
+> Evaluation is deterministic (RetrievalEvaluator, not LLM): satisfied = at least `MIN_RECALL=3` docs **and** at least one `keyword`/`both` match (lexical leg engaged). RRF score-gap detection was abandoned — adjacent scores differ by a constant ~0.0003 regardless of query quality. Rewrite is bounded by `MAX_RETRY=2` plus anti-loop guards: character similarity > 0.8 forces a rephrase angle, duplicate queries stop immediately.
 
 ### 5. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
 

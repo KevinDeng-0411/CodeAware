@@ -232,15 +232,16 @@ flowchart TD
 ```mermaid
 flowchart TD
     A[用户消息] --> B{智能路由<br/>LLM 判断}
-    B -->|direct 常识/闲聊| C[跳过检索<br/>直接回答<br/>标注「未检索知识库」]
-    B -->|retrieve 技术/资料| D[混合检索<br/>BM25 + pgvector RRF<br/>粗排 top_20]
-    D --> E[Reranker 精排<br/>cross-encoder 打分]
-    E --> F{评估<br/>match_type 检测}
-    F -->|满意| G[注入 top_5 → prompt<br/>→ LLM 生成]
-    F -->|不满意 且 retries<2| H[改写查询<br/>防打转 + seen_queries 兜底]
-    H --> D
-    F -->|达上限 或 query 重复| I[返回「未找到」<br/>+ context.warning]
+    B -->|direct 常识/闲聊| C[直接回答<br/>跳过检索]
+    B -->|retrieve 技术/资料| D[混合检索<br/>RRF 粗排池 top_20 → rerank 精排 top_5]
+    D --> E{评估满意?<br/>召回 ≥ 3 且<br/>存在 keyword/both}
+    E -->|是| F[注入 top_5 → prompt<br/>→ LLM 生成]
+    E -->|否, retries < 2| G[改写查询<br/>相似度 > 0.8 → 换角度<br/>seen_queries → 停]
+    G --> D
+    E -->|否, retries ≥ 2 / seen 重复| H[返回「未找到」<br/>+ context.warning]
 ```
+
+> 评估是确定性逻辑（RetrievalEvaluator，非 LLM）：满意 = 至少 `MIN_RECALL=3` 条 **且** 至少一条 `keyword`/`both`（词法腿参与）。RRF 分数差检测已废弃——相邻排名分差恒定约 0.0003，好坏查询分布相同。改写由 `MAX_RETRY=2` 封顶 + 防打转：字符相似度 > 0.8 强制换角度、重复查询立即停止。
 
 ### 5. Agent 模式：LangGraph StateGraph 编排的 ReAct 循环（CHAT_MODE=agent）
 
