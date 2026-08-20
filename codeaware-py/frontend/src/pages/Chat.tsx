@@ -1,5 +1,5 @@
 // Chat - 核心域。SSE 流式 + 多轮 + 会话侧栏 + 信号轨迹
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { MessageSquare, Plus, Send, Square, Trash2, User, Cpu } from "lucide-react";
 import { chat, chatStream } from "../api/client";
 import { ChatStreamProtocolError } from "../api/sseParser";
@@ -49,6 +49,22 @@ export default function ChatPage() {
     current: string | null;
     error: boolean;
   }>({ lit: new Set(), current: null, error: false });
+  // 可调整 chat 宽度（agent 模式：架构图列与 chat 列手动缩放，默认 26rem）
+  const [chatWidth, setChatWidth] = useState(416);
+  const startChatResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = chatWidth;
+    const onMove = (ev: PointerEvent) => {
+      setChatWidth(Math.min(Math.max(startW + (startX - ev.clientX), 320), 900));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   const [streaming, setStreaming] = useState(false);
   const [loadingConv, setLoadingConv] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -366,9 +382,9 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* 架构图（agent 模式，中间大区）+ 对话（右侧） */}
+      {/* 架构图（agent 模式，中间大区）+ 可拖拽分隔条 + 对话（右侧，宽度可调） */}
       {chatMode === "agent" && (
-        <div className="flex-1 min-w-0 border-r border-line bg-panel flex flex-col">
+        <div className="flex-1 min-w-0 bg-panel flex flex-col">
           <AgentArchDiagram
             lit={archHighlight.lit}
             current={archHighlight.current}
@@ -376,10 +392,16 @@ export default function ChatPage() {
           />
         </div>
       )}
+      {chatMode === "agent" && (
+        <div
+          onPointerDown={startChatResize}
+          className="w-1.5 shrink-0 cursor-col-resize touch-none border-r border-line bg-line/20 hover:bg-oxblood/40 transition-colors"
+          title="拖动调整 Chat 宽度"
+        />
+      )}
       <div
-        className={`flex flex-col min-w-0 ${
-          chatMode === "agent" ? "w-[26rem] shrink-0" : "flex-1"
-        }`}
+        className={`flex flex-col min-w-0 ${chatMode === "agent" ? "shrink-0" : "flex-1"}`}
+        style={chatMode === "agent" ? { width: chatWidth } : undefined}
       >
         <div className="h-12 px-5 border-b border-line flex items-center gap-2 bg-panel">
           <MessageSquare className="w-4 h-4 text-oxblood" />
