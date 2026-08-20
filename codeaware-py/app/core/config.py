@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     mem_summary_interval: int = Field(default=5, gt=0)
     mem_summary_batch_size: int = Field(default=20, gt=0)
     mem_summary_max_chars: int = Field(default=12000, gt=0)
+    # 长期记忆召回相似度下限（A 层修复：0.0 全召回 → 0.5 过滤噪声；冲突仲裁见 CHAT 提示词 v2）
+    mem_recall_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 
     # Knowledge 文件上传（C1-C：请求内有界解析，不启用异步索引 Worker）
     knowledge_upload_max_bytes: int = Field(default=5 * 1024 * 1024, gt=0)

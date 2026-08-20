@@ -146,7 +146,7 @@ class ContextBuilder:
             async with AsyncSessionLocal() as s:
                 recalled = await self.vector_recall.recall_by_vector(
                     s, LongTermMemory, message, memory_vector,
-                    threshold=0.0, top_k=5,
+                    threshold=settings.mem_recall_threshold, top_k=5,
                 )
             if recalled:
                 long_ctx = "\n".join(
@@ -263,7 +263,7 @@ class ContextBuilder:
             async with AsyncSessionLocal() as s:
                 recalled = await self.vector_recall.recall_by_vector(
                     s, LongTermMemory, message, memory_vector,
-                    threshold=0.0, top_k=5,
+                    threshold=settings.mem_recall_threshold, top_k=5,
                 )
             if recalled:
                 long_ctx = "\n".join(
