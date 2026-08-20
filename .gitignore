@@ -25,3 +25,6 @@ application-dev.yml
 # 本地模型（reranker ONNX 权重，大文件不入库）
 models/
 .env
+
+# start.sh 运行时 pidfile/日志
+.run/

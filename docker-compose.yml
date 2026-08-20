@@ -27,6 +27,23 @@ services:
       retries: 5
 
   # ============================================================
+  # pgweb — PostgreSQL Web UI（开发期数据浏览，非必需，按需启动）
+  # ============================================================
+  pgweb:
+    image: sosedoff/pgweb
+    container_name: ${CODEAWARE_PGWEB_CONTAINER_NAME:-ai-center-pgweb}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CODEAWARE_PGWEB_PORT:-8081}:8081"
+    environment:
+      # Python 重构版用 ai_center_py（ai_center 是 Java legacy schema，勿连）
+      PGWEB_DATABASE_URL: postgres://aicenter:aicenter123@postgres:5432/ai_center_py?sslmode=disable
+
+
+  # ============================================================
   # Redis 7 — 缓存 + 短期记忆
   # ============================================================
   redis:
