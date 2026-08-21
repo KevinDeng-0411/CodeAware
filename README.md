@@ -258,14 +258,12 @@ flowchart LR
 
     subgraph G["A graph workflow — a map of steps (LangGraph StateGraph)"]
         direction TB
-        S(["START"]) --> Ag["agent node<br/>stream · decide"]
-        Ag -->|tool calls| Tn["tools node<br/>seen-calls dedup · per-tool cap<br/>convergence detect"]
-        Tn -->|not converged → agent| Ag
-        Tn -->|converged → hint + forced round| Ag
-        Tn -->|max steps| E(["END"])
-        Ag -->|no tool calls| Rf["reflect node<br/>self-check · non-thinking model"]
-        Rf -->|reject · retries left → feedback| Ag
-        Rf -->|accept / max reached| E
+        S(["START"]) --> Ag["agent<br/>decide"]
+        Ag -->|tools| Tn["tools<br/>execute + observe"]
+        Tn --> Ag
+        Ag -->|answer| Rf["reflect<br/>self-check"]
+        Rf -->|accept| E(["END"])
+        Rf -->|reject · retries left| Ag
     end
 
     style L fill:#fffde7,stroke:#f9a825

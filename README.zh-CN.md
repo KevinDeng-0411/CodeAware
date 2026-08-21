@@ -258,14 +258,12 @@ flowchart LR
 
     subgraph G["A graph workflow——一张步骤地图（LangGraph StateGraph）"]
         direction TB
-        S(["START"]) --> Ag["agent 节点<br/>流式聚合 · 决策"]
-        Ag -->|有工具调用| Tn["tools 节点<br/>seen-calls 防打转 · per-tool 上限<br/>收敛检测"]
-        Tn -->|未收敛 → 回 agent| Ag
-        Tn -->|已收敛 → 注入提示 · 强制终答轮| Ag
-        Tn -->|达步数上限| E(["END"])
-        Ag -->|无工具调用| Rf["reflect 节点<br/>自评 · 非 thinking 模型"]
-        Rf -->|拒绝且未达上限 → 注入 feedback| Ag
-        Rf -->|接受 / 达上限| E
+        S(["START"]) --> Ag["agent<br/>决策"]
+        Ag -->|有工具调用| Tn["tools<br/>执行 + 观察"]
+        Tn --> Ag
+        Ag -->|无工具调用| Rf["reflect<br/>自评"]
+        Rf -->|接受| E(["END"])
+        Rf -->|拒绝 · 未达上限| Ag
     end
 
     style L fill:#fffde7,stroke:#f9a825
