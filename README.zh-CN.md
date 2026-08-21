@@ -17,6 +17,7 @@ AI 驱动的研发效能平台，为**软件工程实验室团队**设计（代�
 ![Kafka](https://img.shields.io/badge/Kafka-event--driven-231F20)
 ![LangGraph](https://img.shields.io/badge/LangGraph-orchestration-FF6F00)
 ![embedding](https://img.shields.io/badge/embedding-bge--m3-FFA500)
+![GitHub Actions CI](https://github.com/KevinDeng-0411/CodeAware/actions/workflows/ci.yml/badge.svg)
 
 > 项目从 Java（Spring Boot + LangChain4j）全量重构为 Python（FastAPI），Java 旧实现保留在 [java-legacy/](java-legacy/) 仅供参照。
 

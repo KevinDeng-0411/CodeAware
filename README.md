@@ -17,6 +17,7 @@ The core is a **dual-mode Chat** (`CHAT_MODE=rag|agent`): **RAG mode** does hybr
 ![Kafka](https://img.shields.io/badge/Kafka-event--driven-231F20)
 ![LangGraph](https://img.shields.io/badge/LangGraph-orchestration-FF6F00)
 ![embedding](https://img.shields.io/badge/embedding-bge--m3-FFA500)
+![GitHub Actions CI](https://github.com/KevinDeng-0411/CodeAware/actions/workflows/ci.yml/badge.svg)
 
 > The project was fully refactored from Java (Spring Boot + LangChain4j) to Python (FastAPI); the legacy Java implementation is kept in [java-legacy/](java-legacy/) for reference only.
 
