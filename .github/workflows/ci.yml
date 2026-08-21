@@ -36,6 +36,9 @@ jobs:
       - name: Install deps (incl. dev pytest)
         run: uv sync --frozen
 
+      - name: Set up buildx (container driver for gha cache)
+        uses: docker/setup-buildx-action@v3
+
       - name: Build pg image (with layer cache)
         uses: docker/build-push-action@v6
         with:
