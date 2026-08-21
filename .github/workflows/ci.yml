@@ -22,6 +22,9 @@ jobs:
         working-directory: codeaware-py
     steps:
       - uses: actions/checkout@v4
+        # test_validator 需 git rev-parse HEAD~3，浅克隆 fetch-depth:1 无历史会失败
+        with:
+          fetch-depth: 0
 
       - name: Set up uv + Python 3.12
         uses: astral-sh/setup-uv@v5
