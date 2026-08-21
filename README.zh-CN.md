@@ -243,9 +243,38 @@ flowchart TD
 
 > 评估是确定性逻辑（RetrievalEvaluator，非 LLM）：满意 = 至少 `MIN_RECALL=3` 条 **且** 至少一条 `keyword`/`both`（词法腿参与）。RRF 分数差检测已废弃——相邻排名分差恒定约 0.0003，好坏查询分布相同。改写由 `MAX_RETRY=2` 封顶 + 防打转：字符相似度 > 0.8 强制换角度、重复查询立即停止。
 
-### 5. Agent 模式：LangGraph StateGraph 编排的 ReAct 循环（CHAT_MODE=agent）
+### 5. Agent 模式：图工作流——ReAct 循环作为步骤地图（CHAT_MODE=agent）
+
+Agent 模式不是单条脚本化的循环，而是一个 **graph workflow（图工作流）——一张步骤地图**：LangGraph `StateGraph` 把 `agent` / `tools` / `reflect` 三个节点摆在图上，用条件边决定**每一轮**的路由。think→act→observe 循环是图中那条回边；围绕它的图才是决策地图（检索收敛 / per-tool 上限 / Reflection 自评）。
+
+```mermaid
+flowchart LR
+    subgraph L["THE loop——一条路径，一步接一步"]
+        direction TB
+        T["think · agent_node<br/>bind_tools astream<br/>回注 reasoning_content"] --> A["act · tools_node<br/>执行工具 / 观察"]
+        A --> O["observe<br/>ToolMessage + reasoning_content<br/>回注进上下文"]
+        O -. "下一轮" .-> T
+    end
+
+    subgraph G["A graph workflow——一张步骤地图（LangGraph StateGraph）"]
+        direction TB
+        S(["START"]) --> Ag["agent 节点<br/>流式聚合 · 决策"]
+        Ag -->|有工具调用| Tn["tools 节点<br/>seen-calls 防打转 · per-tool 上限<br/>收敛检测"]
+        Tn -->|未收敛 → 回 agent| Ag
+        Tn -->|已收敛 → 注入提示 · 强制终答轮| Ag
+        Tn -->|达步数上限| E(["END"])
+        Ag -->|无工具调用| Rf["reflect 节点<br/>自评 · 非 thinking 模型"]
+        Rf -->|拒绝且未达上限 → 注入 feedback| Ag
+        Rf -->|接受 / 达上限| E
+    end
+
+    style L fill:#fffde7,stroke:#f9a825
+    style G fill:#fffde7,stroke:#f9a825
+```
 
 > ADR-0018 起，循环不再是手写 async generator——`agent_graph.py` 是 LangGraph `StateGraph`（`agent`/`tools`/`reflect` 节点 + 条件边）；`react_loop.py` 是保持 SSE 契约不变的薄壳。**Reflection**（agent 模式默认开启；kill-switch `AGENT_REFLECTION_ENABLED=false`）缓冲 draft、用非 thinking 模型自评、接受后一次性流式答案（无 draft 泄漏）；判定写入 `agent_runs` trace 的 `reflection` 条目。
+
+**单回合展开**——同一流程逐步走一遍，含事务与 typed SSE 事件：
 
 ```mermaid
 flowchart TD

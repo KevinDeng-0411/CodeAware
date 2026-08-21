@@ -243,9 +243,38 @@ flowchart TD
 
 > Evaluation is deterministic (RetrievalEvaluator, not LLM): satisfied = at least `MIN_RECALL=3` docs **and** at least one `keyword`/`both` match (lexical leg engaged). RRF score-gap detection was abandoned — adjacent scores differ by a constant ~0.0003 regardless of query quality. Rewrite is bounded by `MAX_RETRY=2` plus anti-loop guards: character similarity > 0.8 forces a rephrase angle, duplicate queries stop immediately.
 
-### 5. Agent Mode: ReAct Loop in LangGraph StateGraph (CHAT_MODE=agent)
+### 5. Agent Mode: a Graph Workflow — the ReAct Loop as a Map of Steps (CHAT_MODE=agent)
+
+Agent mode is not a single scripted loop — it is a **graph workflow, a map of steps**: a LangGraph `StateGraph` where `agent` / `tools` / `reflect` are three placed nodes joined by conditional edges that route *every turn*. The think→act→observe cycle is the loop edge; the graph around it is the decision map (retrieval convergence, per-tool caps, reflection).
+
+```mermaid
+flowchart LR
+    subgraph L["The loop — one path, step after step"]
+        direction TB
+        T["think · agent_node<br/>bind_tools astream<br/>reasoning rolled back"] --> A["act · tools_node<br/>execute / observe"]
+        A --> O["observe<br/>ToolMessage + reasoning_content<br/>rolled into context"]
+        O -. "next round" .-> T
+    end
+
+    subgraph G["A graph workflow — a map of steps (LangGraph StateGraph)"]
+        direction TB
+        S(["START"]) --> Ag["agent node<br/>stream · decide"]
+        Ag -->|tool calls| Tn["tools node<br/>seen-calls dedup · per-tool cap<br/>convergence detect"]
+        Tn -->|not converged → agent| Ag
+        Tn -->|converged → hint + forced round| Ag
+        Tn -->|max steps| E(["END"])
+        Ag -->|no tool calls| Rf["reflect node<br/>self-check · non-thinking model"]
+        Rf -->|reject · retries left → feedback| Ag
+        Rf -->|accept / max reached| E
+    end
+
+    style L fill:#fffde7,stroke:#f9a825
+    style G fill:#fffde7,stroke:#f9a825
+```
 
 > Since ADR-0018 the loop is no longer a hand-written async generator — `agent_graph.py` is a LangGraph `StateGraph` (`agent` / `tools` / `reflect` nodes + conditional edges); `react_loop.py` is a thin shell keeping the SSE contract unchanged. **Reflection** (on by default in agent mode; kill-switch `AGENT_REFLECTION_ENABLED=false`) buffers the draft, runs a non-thinking-model self-check, and streams the accepted answer once (no draft leak); verdicts land in the `agent_runs` trace as `reflection` entries.
+
+**One turn expanded** — the same flow step by step, with transactions and typed-SSE events:
 
 ```mermaid
 flowchart TD
