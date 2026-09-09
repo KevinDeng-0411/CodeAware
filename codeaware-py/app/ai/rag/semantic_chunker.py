@@ -8,11 +8,14 @@ from unstructured.chunking.title import chunk_by_title
 from unstructured.partition.md import partition_md
 from unstructured.partition.text import partition_text
 
+from app.core.config import settings
+
 
 class SemanticChunker:
-    def __init__(self, chunk_size: int = 500, overlap: int = 50) -> None:
-        self.chunk_size = chunk_size
-        self.overlap = overlap
+    def __init__(self, chunk_size: int | None = None, overlap: int | None = None) -> None:
+        # None → 用配置默认（.env 可调）；显式传入可覆盖（测试/评估用）
+        self.chunk_size = chunk_size if chunk_size is not None else settings.rag_chunk_size
+        self.overlap = overlap if overlap is not None else settings.rag_chunk_overlap
 
     def chunk(self, content: str, content_type: str = "md") -> list[str]:
         """按 Markdown 标题切（结构感知）+ 控大小 + overlap，返回 chunk 文本列表。"""

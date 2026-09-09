@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     # RAG 运行时（LangGraph 检索增强）：graph=智能路由+自我纠错 / service=原路径回退
     rag_runtime: str = "graph"  # 出问题改 "service" 一键回退
 
+    # 分块参数（chunk_by_title 软/硬上限 + overlap，默认 500/50 由 4K 窗口推导，见 chunking-strategy）
+    # 默认值守恒 golden 基线；改大需自行评估 context 溢出（500×top5 ≈ 2500 字已近 4K）
+    rag_chunk_size: int = Field(default=500, ge=50)
+    rag_chunk_overlap: int = Field(default=50, ge=0)
+
     # Chat 模式（ADR-0016）：rag=确定性 RAG 状态机（默认） / agent=ReAct 工具循环
     chat_mode: str = "rag"  # 出问题改 "rag" 一键回退（agent 模式动 SSE 协议，需前端同步）
 
